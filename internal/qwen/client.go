@@ -22,6 +22,14 @@ type ClientConfig struct {
 	SsxmodItna     string
 	Ssxmodi2       string
 	TimeoutSeconds int
+	// PoolingEnabled enables connection pooling for both regular and stream clients.
+	PoolingEnabled bool
+	// MaxIdleConns caps the total number of idle keep-alive connections.
+	MaxIdleConns int
+	// MaxIdleConnsPerHost caps per-host idle connections.
+	MaxIdleConnsPerHost int
+	// IdleConnTimeoutSeconds is how long an idle connection stays in the pool.
+	IdleConnTimeoutSeconds int
 }
 
 // Client talks to chat.qwen.ai.
@@ -43,14 +51,39 @@ func NewClient(cfg ClientConfig) *Client {
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
+
+	var transport *http.Transport
+	if cfg.PoolingEnabled {
+		base := http.DefaultTransport.(*http.Transport).Clone()
+		if cfg.MaxIdleConns > 0 {
+			base.MaxIdleConns = cfg.MaxIdleConns
+		} else {
+			base.MaxIdleConns = 100
+		}
+		if cfg.MaxIdleConnsPerHost > 0 {
+			base.MaxIdleConnsPerHost = cfg.MaxIdleConnsPerHost
+		} else {
+			base.MaxIdleConnsPerHost = 32
+		}
+		idle := time.Duration(cfg.IdleConnTimeoutSeconds) * time.Second
+		if idle <= 0 {
+			idle = 90 * time.Second
+		}
+		base.IdleConnTimeout = idle
+		transport = base
+	}
+
+	httpClient := &http.Client{Timeout: timeout}
+	streamClient := &http.Client{}
+	if transport != nil {
+		httpClient.Transport = transport
+		streamClient.Transport = transport
+	}
+
 	return &Client{
-		cfg: cfg,
-		http: &http.Client{
-			Timeout: timeout,
-		},
-		stream: &http.Client{
-			// no overall timeout — streaming responses can be long
-		},
+		cfg:    cfg,
+		http:   httpClient,
+		stream: streamClient,
 	}
 }
 

@@ -10,7 +10,10 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/keaume34/qwen2api/internal/config"
+	"github.com/keaume34/qwen2api/internal/metrics"
+	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
+	"github.com/keaume34/qwen2api/internal/reqlog"
 	"github.com/keaume34/qwen2api/internal/tokenpool"
 )
 
@@ -20,6 +23,9 @@ type Deps struct {
 	Logger    *slog.Logger
 	Qwen      *qwen.Client
 	TokenPool *tokenpool.Pool
+	Cache     *promptcache.Cache
+	Metrics   *metrics.Registry
+	ReqLog    *reqlog.Logger
 }
 
 // New returns the configured http.Handler.
@@ -31,9 +37,20 @@ func New(deps Deps) http.Handler {
 	r.Use(corsMiddleware)
 
 	h := &handlers{deps: deps}
+	if deps.Metrics != nil {
+		r.Use(h.metricsMiddleware)
+	}
 
 	r.Get("/healthz", h.health)
 	r.Get("/readyz", h.ready)
+
+	if deps.Config.Features.Metrics && deps.Metrics != nil {
+		r.Get("/metrics", h.prometheusMetrics)
+	}
+	if deps.Config.Features.Dashboard {
+		r.Get("/dashboard", h.dashboard)
+		r.Get("/dashboard/data", h.dashboardData)
+	}
 
 	// OpenAI-compatible surface, accessible both at /v1/* and at the root for
 	// clients that strip the version prefix.
@@ -43,7 +60,20 @@ func New(deps Deps) http.Handler {
 		r.Get("/models", h.listModels)
 		r.Post("/v1/chat/completions", h.chatCompletions)
 		r.Post("/chat/completions", h.chatCompletions)
+		if deps.Config.Features.Embeddings {
+			r.Post("/v1/embeddings", h.embeddings)
+			r.Post("/embeddings", h.embeddings)
+		}
 	})
+
+	if deps.Config.Features.APIKeyRotation {
+		r.Group(func(r chi.Router) {
+			r.Use(h.adminMiddleware)
+			r.Get("/admin/keys", h.listAPIKeys)
+			r.Post("/admin/keys", h.createAPIKey)
+			r.Delete("/admin/keys/{value}", h.deleteAPIKey)
+		})
+	}
 
 	return r
 }
@@ -51,7 +81,7 @@ func New(deps Deps) http.Handler {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)

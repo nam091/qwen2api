@@ -13,7 +13,10 @@ import (
 	"time"
 
 	"github.com/keaume34/qwen2api/internal/config"
+	"github.com/keaume34/qwen2api/internal/metrics"
+	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
+	"github.com/keaume34/qwen2api/internal/reqlog"
 	"github.com/keaume34/qwen2api/internal/server"
 	"github.com/keaume34/qwen2api/internal/tokenpool"
 )
@@ -48,13 +51,41 @@ func run() error {
 		SsxmodItna:     cfg.SsxmodItna,
 		Ssxmodi2:       cfg.SsxmodItna2,
 		TimeoutSeconds: cfg.TimeoutSeconds,
+		PoolingEnabled: cfg.Features.ConnectionPooling,
 	})
+
+	var cache *promptcache.Cache
+	if cfg.Features.PromptCaching {
+		cache = promptcache.New(cfg.Cache.MaxEntries, time.Duration(cfg.Cache.TTLSeconds)*time.Second)
+	}
+
+	var metricsReg *metrics.Registry
+	if cfg.Features.Metrics {
+		metricsReg = metrics.New()
+	}
+
+	var reqLogger *reqlog.Logger
+	if cfg.Features.RequestLogging {
+		rl, err := reqlog.NewLogger(cfg.Logging.Path, cfg.Logging.MaxSizeMB, cfg.Logging.MaxBackups, cfg.Logging.TruncateLen)
+		if err != nil {
+			logger.Warn("request logging init failed", "err", err)
+		} else {
+			reqLogger = rl
+		}
+	}
+
+	if cfg.Features.AutoTokenRefresh {
+		go tokenHealthLoop(logger, client, pool, cfg)
+	}
 
 	srv := server.New(server.Deps{
 		Config:    cfg,
 		Logger:    logger,
 		Qwen:      client,
 		TokenPool: pool,
+		Cache:     cache,
+		Metrics:   metricsReg,
+		ReqLog:    reqLogger,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
@@ -90,5 +121,50 @@ func run() error {
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		return fmt.Errorf("shutdown: %w", err)
 	}
+	if reqLogger != nil {
+		_ = reqLogger.Close()
+	}
 	return nil
+}
+
+// tokenHealthLoop periodically pings upstream to detect dead/expired tokens
+// and decodes JWT exp to warn before expiry.
+func tokenHealthLoop(logger *slog.Logger, client *qwen.Client, pool *tokenpool.Pool, cfg config.Config) {
+	interval := time.Duration(cfg.TokenRefresh.CheckIntervalSeconds) * time.Second
+	if interval <= 0 {
+		interval = 5 * time.Minute
+	}
+	warnBefore := time.Duration(cfg.TokenRefresh.WarnBeforeSeconds) * time.Second
+	if warnBefore <= 0 {
+		warnBefore = time.Hour
+	}
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		now := time.Now()
+		for _, st := range pool.Statuses() {
+			exp := decodeJWTExp(st.Value)
+			if exp > 0 {
+				remaining := time.Until(time.Unix(exp, 0))
+				if remaining <= 0 {
+					logger.Warn("token expired", "name", st.Name)
+					pool.MarkBad(st.Value)
+					continue
+				}
+				if remaining < warnBefore {
+					logger.Warn("token expiring soon", "name", st.Name, "remaining_seconds", int(remaining.Seconds()))
+				}
+			}
+			if st.OnCooldown {
+				continue
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			_, err := client.Models(ctx, st.Value)
+			cancel()
+			if err != nil {
+				logger.Warn("token health probe failed", "name", st.Name, "err", err)
+			}
+			_ = now
+		}
+	}
 }

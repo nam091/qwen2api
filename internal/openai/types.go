@@ -12,15 +12,19 @@ type ChatRequest struct {
 	Temperature *float64      `json:"temperature,omitempty"`
 	TopP        *float64      `json:"top_p,omitempty"`
 	MaxTokens   *int          `json:"max_tokens,omitempty"`
+	Tools       []Tool        `json:"tools,omitempty"`
+	ToolChoice  any           `json:"tool_choice,omitempty"`
 	// Qwen extensions accepted but optional.
 	EnableThinking *bool `json:"enable_thinking,omitempty"`
 }
 
 // ChatMessage allows both plain-string and array (multimodal) content.
 type ChatMessage struct {
-	Role    string          `json:"role"`
-	Content json.RawMessage `json:"content"`
-	Name    string          `json:"name,omitempty"`
+	Role       string          `json:"role"`
+	Content    json.RawMessage `json:"content"`
+	Name       string          `json:"name,omitempty"`
+	ToolCallID string          `json:"tool_call_id,omitempty"`
+	ToolCalls  []ToolCall      `json:"tool_calls,omitempty"`
 }
 
 // Text returns the plain text view of Content. Multimodal arrays are flattened
@@ -51,6 +55,44 @@ func (m ChatMessage) Text() string {
 	return ""
 }
 
+// ContentPart describes one element of a multimodal message body.
+type ContentPart struct {
+	Type     string `json:"type"`
+	Text     string `json:"text,omitempty"`
+	ImageURL *struct {
+		URL    string `json:"url"`
+		Detail string `json:"detail,omitempty"`
+	} `json:"image_url,omitempty"`
+}
+
+// Parts returns the structured content parts for a multimodal message. Returns
+// nil if Content is a plain string.
+func (m ChatMessage) Parts() []ContentPart {
+	if len(m.Content) == 0 {
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(m.Content, &s); err == nil {
+		return nil
+	}
+	var parts []ContentPart
+	if err := json.Unmarshal(m.Content, &parts); err == nil {
+		return parts
+	}
+	return nil
+}
+
+// Images returns image URLs contained in a multimodal message body.
+func (m ChatMessage) Images() []string {
+	var out []string
+	for _, p := range m.Parts() {
+		if p.Type == "image_url" && p.ImageURL != nil && p.ImageURL.URL != "" {
+			out = append(out, p.ImageURL.URL)
+		}
+	}
+	return out
+}
+
 // ChatCompletion is the non-streaming response envelope.
 type ChatCompletion struct {
 	ID      string   `json:"id"`
@@ -70,8 +112,9 @@ type Choice struct {
 
 // ChatMessageOut is the assistant message returned to the client.
 type ChatMessageOut struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
+	Role      string     `json:"role"`
+	Content   *string    `json:"content"`
+	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // Usage carries token accounting.
@@ -100,8 +143,49 @@ type StreamChoice struct {
 
 // Delta is the incremental content for a stream chunk.
 type Delta struct {
-	Role    string `json:"role,omitempty"`
-	Content string `json:"content,omitempty"`
+	Role      string          `json:"role,omitempty"`
+	Content   string          `json:"content,omitempty"`
+	ToolCalls []ToolCallDelta `json:"tool_calls,omitempty"`
+}
+
+// Tool describes a function the model may call.
+type Tool struct {
+	Type     string       `json:"type"`
+	Function ToolFunction `json:"function"`
+}
+
+// ToolFunction is the function schema within a Tool definition.
+type ToolFunction struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description,omitempty"`
+	Parameters  json.RawMessage `json:"parameters,omitempty"`
+}
+
+// ToolCall is a structured tool invocation in the response.
+type ToolCall struct {
+	ID       string           `json:"id"`
+	Type     string           `json:"type"`
+	Function ToolCallFunction `json:"function"`
+}
+
+// ToolCallFunction carries the name and serialized arguments of a tool call.
+type ToolCallFunction struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// ToolCallDelta is the incremental streaming form of a tool call.
+type ToolCallDelta struct {
+	Index    int               `json:"index"`
+	ID       string            `json:"id,omitempty"`
+	Type     string            `json:"type,omitempty"`
+	Function ToolCallFuncDelta `json:"function,omitempty"`
+}
+
+// ToolCallFuncDelta carries incremental name/arguments for streaming.
+type ToolCallFuncDelta struct {
+	Name      string `json:"name,omitempty"`
+	Arguments string `json:"arguments,omitempty"`
 }
 
 // ModelList is the OpenAI /v1/models envelope.
