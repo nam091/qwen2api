@@ -5,6 +5,7 @@ package server
 import (
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -12,11 +13,12 @@ import (
 	"github.com/keaume34/qwen2api/internal/affinity"
 	"github.com/keaume34/qwen2api/internal/config"
 	"github.com/keaume34/qwen2api/internal/filecache"
+	"github.com/keaume34/qwen2api/internal/garbagecollector"
 	"github.com/keaume34/qwen2api/internal/metrics"
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/reqlog"
-	"github.com/keaume34/qwen2api/internal/tokencount"
+	"github.com/keaume34/qwen2api/internal/ssxmod"
 	"github.com/keaume34/qwen2api/internal/tokenpool"
 )
 
@@ -30,10 +32,13 @@ type Deps struct {
 	Metrics   *metrics.Registry
 	ReqLog    *reqlog.Logger
 
-	// Phase 1 features
-	Affinity      *affinity.Store
-	FileCache     *filecache.Cache
-	TokenCounter  *tokencount.Counter
+	// New feature dependencies
+	FileCache      *filecache.Cache
+	ChatGC         *garbagecollector.GC
+	AffinityStore  *affinity.Store
+	SSXMODManager  *ssxmod.Manager
+
+	startTime time.Time
 }
 
 // New returns the configured http.Handler.
@@ -44,6 +49,7 @@ func New(deps Deps) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
 
+	deps.startTime = time.Now()
 	h := &handlers{deps: deps}
 	if deps.Metrics != nil {
 		r.Use(h.metricsMiddleware)
@@ -76,12 +82,37 @@ func New(deps Deps) http.Handler {
 		r.Post("/anthropic/v1/messages", h.claudeMessages)
 	})
 
-	if deps.Config.Features.APIKeyRotation {
+	if deps.Config.Features.APIKeyRotation || deps.Config.Features.AdminAPI {
 		r.Group(func(r chi.Router) {
 			r.Use(h.adminMiddleware)
 			r.Get("/admin/keys", h.listAPIKeys)
 			r.Post("/admin/keys", h.createAPIKey)
 			r.Delete("/admin/keys/{value}", h.deleteAPIKey)
+			if deps.Config.Features.AdminAPI {
+				r.Get("/admin/status", h.adminStatus)
+				r.Get("/admin/accounts", h.adminListAccounts)
+				r.Get("/admin/settings", h.adminGetSettings)
+				r.Put("/admin/settings", h.adminUpdateSettings)
+			}
+		})
+	}
+
+	// Image generation API (DALL-E compatible)
+	if deps.Config.Features.ImageGeneration {
+		r.Group(func(r chi.Router) {
+			r.Use(h.authMiddleware)
+			r.Post("/v1/images/generations", h.imageGenerations)
+			r.Post("/images/generations", h.imageGenerations)
+		})
+	}
+
+	// Gemini API
+	if deps.Config.Features.GeminiAPI {
+		r.Group(func(r chi.Router) {
+			r.Use(h.authMiddleware)
+			r.Get("/v1beta/models", h.geminiListModels)
+			r.Post("/v1beta/models/{model}:generateContent", h.geminiGenerateContent)
+			r.Post("/v1beta/models/{model}:streamGenerateContent", h.geminiStreamGenerateContent)
 		})
 	}
 

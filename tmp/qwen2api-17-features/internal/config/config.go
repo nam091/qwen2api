@@ -13,8 +13,11 @@ import (
 
 // Token is a single upstream Qwen credential.
 type Token struct {
-	Value string `json:"value"`
-	Name  string `json:"name,omitempty"`
+	Value    string `json:"value"`
+	Name     string `json:"name,omitempty"`
+	Proxy    string `json:"proxy,omitempty"`    // per-account proxy URL (http/socks5)
+	Email    string `json:"email,omitempty"`    // for auto-login
+	Password string `json:"password,omitempty"` // for auto-login
 }
 
 // APIKey is a single client-facing API key with optional expiry.
@@ -26,6 +29,7 @@ type APIKey struct {
 
 // FeatureToggles enables/disables optional v2 features.
 type FeatureToggles struct {
+	// Core features
 	PromptCaching          bool `json:"prompt_caching"`
 	RetryOnTokenFailure    bool `json:"retry_on_token_failure"`
 	ConnectionPooling      bool `json:"connection_pooling"`
@@ -38,9 +42,33 @@ type FeatureToggles struct {
 	Embeddings             bool `json:"embeddings"`
 	ConversationContinuity bool `json:"conversation_continuity"`
 	APIKeyRotation         bool `json:"api_key_rotation"`
-	SessionAffinity        bool `json:"session_affinity"`
-	FileCache              bool `json:"file_cache"`
-	TopicIsolation         bool `json:"topic_isolation"`
+
+	// Batch 1: Quick wins
+	TopicIsolation   bool `json:"topic_isolation"`
+	FileContentCache bool `json:"file_content_cache"`
+	ChatGC           bool `json:"chat_gc"`
+	PreciseTokens    bool `json:"precise_tokens"`
+
+	// Batch 2: Medium complexity
+	ClientProfile   bool `json:"client_profile"`
+	ToolFewShot     bool `json:"tool_few_shot"`
+	SessionAffinity bool `json:"session_affinity"`
+	PerAccountProxy bool `json:"per_account_proxy"`
+	AutoLogin       bool `json:"auto_login"`
+
+	// Batch 3: API endpoints
+	ImageGeneration bool `json:"image_generation"`
+	GeminiAPI       bool `json:"gemini_api"`
+	AdminAPI        bool `json:"admin_api"`
+
+	// Batch 4: Complex
+	FileUploadOSS    bool `json:"file_upload_oss"`
+	ContextOffloading bool `json:"context_offloading"`
+
+	// Batch 5: Anti-bot
+	SSXMODGeneration   bool `json:"ssxmod_generation"`
+	BrowserFingerprint bool `json:"browser_fingerprint"`
+	BrowserFallback    bool `json:"browser_fallback"`
 }
 
 // CacheConfig configures the prompt cache.

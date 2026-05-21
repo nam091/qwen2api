@@ -12,15 +12,12 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/keaume34/qwen2api/internal/affinity"
 	"github.com/keaume34/qwen2api/internal/config"
-	"github.com/keaume34/qwen2api/internal/filecache"
 	"github.com/keaume34/qwen2api/internal/metrics"
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/reqlog"
 	"github.com/keaume34/qwen2api/internal/server"
-	"github.com/keaume34/qwen2api/internal/tokencount"
 	"github.com/keaume34/qwen2api/internal/tokenpool"
 )
 
@@ -81,30 +78,14 @@ func run() error {
 		go tokenHealthLoop(logger, client, pool, cfg)
 	}
 
-	var affinityStore *affinity.Store
-	if cfg.Features.SessionAffinity {
-		affinityStore = affinity.NewStore(2 * time.Hour)
-	}
-
-	var fileCache *filecache.Cache
-	if cfg.Features.FileCache {
-		fileCache = filecache.New(200, 15*time.Minute)
-	}
-
-	var tokenCounter *tokencount.Counter
-	tokenCounter = tokencount.New(4.0)
-
 	srv := server.New(server.Deps{
-		Config:       cfg,
-		Logger:       logger,
-		Qwen:         client,
-		TokenPool:    pool,
-		Cache:        cache,
-		Metrics:      metricsReg,
-		ReqLog:       reqLogger,
-		Affinity:     affinityStore,
-		FileCache:    fileCache,
-		TokenCounter: tokenCounter,
+		Config:    cfg,
+		Logger:    logger,
+		Qwen:      client,
+		TokenPool: pool,
+		Cache:     cache,
+		Metrics:   metricsReg,
+		ReqLog:    reqLogger,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
