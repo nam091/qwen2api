@@ -64,6 +64,8 @@ func New(deps Deps) http.Handler {
 			r.Post("/v1/embeddings", h.embeddings)
 			r.Post("/embeddings", h.embeddings)
 		}
+		// Claude API compatibility
+		r.Post("/anthropic/v1/messages", h.claudeMessages)
 	})
 
 	if deps.Config.Features.APIKeyRotation {

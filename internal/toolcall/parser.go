@@ -7,7 +7,10 @@ import (
 	"strings"
 
 	"github.com/google/uuid"
+	"github.com/keaume34/qwen2api/internal/hallucination"
+	"github.com/keaume34/qwen2api/internal/jsonrepair"
 	"github.com/keaume34/qwen2api/internal/openai"
+	"github.com/keaume34/qwen2api/internal/toolname"
 )
 
 var (
@@ -34,9 +37,12 @@ func Parse(text string) ParseResult {
 
 // ParseWithFormats extracts tool calls from text. When multiFormat is true,
 // also recognizes Claude-style <function_calls><invoke> blocks and bare JSON.
+// Applies hallucination protection to filter invalid/duplicate calls.
 func ParseWithFormats(text string, multiFormat bool) ParseResult {
 	calls, content := parseToolCallBlocks(text)
 	if !multiFormat {
+		// Apply hallucination protection
+		calls, _ = hallucination.Sanitize(calls)
 		return ParseResult{Content: strings.TrimSpace(content), ToolCalls: calls}
 	}
 
@@ -47,6 +53,9 @@ func ParseWithFormats(text string, multiFormat bool) ParseResult {
 	// Bare JSON tool calls (no <tool_call> wrapper).
 	moreCalls, content = parseBareJSON(content)
 	calls = append(calls, moreCalls...)
+
+	// Apply hallucination protection: remove invalid/duplicate calls
+	calls, _ = hallucination.Sanitize(calls)
 
 	return ParseResult{
 		Content:   strings.TrimSpace(content),
@@ -92,6 +101,10 @@ func parseFunctionCallBlocks(text string) ([]openai.ToolCall, string) {
 		for _, inv := range invokes {
 			name := strings.TrimSpace(inv[1])
 			body := inv[2]
+
+			// De-obfuscate tool name
+			clientName := toolname.FromQwen(name)
+
 			params := map[string]string{}
 			for _, pm := range reInvokeParameter.FindAllStringSubmatch(body, -1) {
 				params[strings.TrimSpace(pm[1])] = strings.TrimSpace(pm[2])
@@ -104,7 +117,7 @@ func parseFunctionCallBlocks(text string) ([]openai.ToolCall, string) {
 				ID:   generateID(),
 				Type: "function",
 				Function: openai.ToolCallFunction{
-					Name:      name,
+					Name:      clientName,
 					Arguments: string(argsJSON),
 				},
 			})
@@ -137,6 +150,14 @@ func parseBareJSON(text string) ([]openai.ToolCall, string) {
 }
 
 func parseBlock(inner string) (openai.ToolCall, bool) {
+	// Try to repair the entire block first if it's not valid JSON
+	if !json.Valid([]byte(inner)) {
+		repaired, changed := jsonrepair.Repair(inner)
+		if changed {
+			inner = repaired
+		}
+	}
+
 	if tc, ok := parseJSON(inner); ok {
 		return tc, true
 	}
@@ -155,9 +176,17 @@ func parseJSON(inner string) (openai.ToolCall, bool) {
 		return openai.ToolCall{}, false
 	}
 
+	// De-obfuscate tool name from Qwen back to client name
+	clientName := toolname.FromQwen(raw.Name)
+
 	var argsStr string
 	if len(raw.Arguments) > 0 {
 		argsStr = string(raw.Arguments)
+		// Validate and repair arguments JSON if needed
+		if !json.Valid([]byte(argsStr)) {
+			repaired, _ := jsonrepair.Repair(argsStr)
+			argsStr = repaired
+		}
 	} else {
 		argsStr = "{}"
 	}
@@ -166,7 +195,7 @@ func parseJSON(inner string) (openai.ToolCall, bool) {
 		ID:   generateID(),
 		Type: "function",
 		Function: openai.ToolCallFunction{
-			Name:      raw.Name,
+			Name:      clientName,
 			Arguments: argsStr,
 		},
 	}, true
@@ -180,6 +209,9 @@ func parseXML(inner string) (openai.ToolCall, bool) {
 
 	funcName := strings.TrimSpace(funcMatch[1])
 	funcBody := funcMatch[2]
+
+	// De-obfuscate tool name
+	clientName := toolname.FromQwen(funcName)
 
 	params := map[string]string{}
 	paramMatches := reParameter.FindAllStringSubmatch(funcBody, -1)
@@ -198,7 +230,7 @@ func parseXML(inner string) (openai.ToolCall, bool) {
 		ID:   generateID(),
 		Type: "function",
 		Function: openai.ToolCallFunction{
-			Name:      funcName,
+			Name:      clientName,
 			Arguments: string(argsJSON),
 		},
 	}, true

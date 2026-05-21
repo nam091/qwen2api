@@ -232,3 +232,45 @@ func TestParseWithFormats_Disabled(t *testing.T) {
 		t.Errorf("disabled multi-format should not parse function_calls; got %d", len(result.ToolCalls))
 	}
 }
+
+func TestParse_MalformedArgumentsRepair(t *testing.T) {
+	// Unescaped newlines in arguments
+	input := `<tool_call>
+{"name": "write_file", "arguments": {"content": "line1
+line2
+line3"}}
+</tool_call>`
+	result := Parse(input)
+	if len(result.ToolCalls) != 1 {
+		t.Fatalf("got %d tool calls, want 1", len(result.ToolCalls))
+	}
+	tc := result.ToolCalls[0]
+	if tc.Function.Name != "write_file" {
+		t.Errorf("name = %q", tc.Function.Name)
+	}
+	// Arguments should be valid JSON after repair
+	if !json.Valid([]byte(tc.Function.Arguments)) {
+		t.Errorf("arguments not valid JSON after repair: %s", tc.Function.Arguments)
+	}
+	var args map[string]string
+	if err := json.Unmarshal([]byte(tc.Function.Arguments), &args); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !strings.Contains(args["content"], "line1") {
+		t.Errorf("content missing line1: %q", args["content"])
+	}
+}
+
+func TestParse_TrailingCommaRepair(t *testing.T) {
+	input := `<tool_call>
+{"name": "test", "arguments": {"a": 1, "b": 2,}}
+</tool_call>`
+	result := Parse(input)
+	if len(result.ToolCalls) != 1 {
+		t.Fatalf("got %d tool calls, want 1", len(result.ToolCalls))
+	}
+	if !json.Valid([]byte(result.ToolCalls[0].Function.Arguments)) {
+		t.Errorf("arguments not valid after repair: %s", result.ToolCalls[0].Function.Arguments)
+	}
+}
+
