@@ -85,6 +85,16 @@ func New(deps Deps) http.Handler {
 		})
 	}
 
+	// Config management API (admin only)
+	r.Group(func(r chi.Router) {
+		r.Use(h.adminMiddleware)
+		r.Get("/admin/config", h.getConfig)
+		r.Put("/admin/config/features", h.updateFeatures)
+		r.Post("/admin/config/tokens", h.addToken)
+		r.Delete("/admin/config/tokens", h.removeToken)
+		r.Put("/admin/config/aliases", h.updateModelAliases)
+	})
+
 	return r
 }
 

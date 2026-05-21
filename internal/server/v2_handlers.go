@@ -3,6 +3,7 @@ package server
 import (
 	"encoding/json"
 	"net/http"
+	"os"
 	"sort"
 	"strings"
 	"time"
@@ -141,6 +142,13 @@ func (h *handlers) embeddings(w http.ResponseWriter, r *http.Request) {
 // dashboard renders a single-page HTML view.
 func (h *handlers) dashboard(w http.ResponseWriter, _ *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	// Try to serve from web/dashboard.html first
+	content, err := os.ReadFile("web/dashboard.html")
+	if err == nil {
+		_, _ = w.Write(content)
+		return
+	}
+	// Fallback to embedded HTML
 	_, _ = w.Write([]byte(dashboardHTML))
 }
 

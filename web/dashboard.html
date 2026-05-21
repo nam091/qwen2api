@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>qwen2api dashboard</title>
+<style>
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, system-ui, "Segoe UI", sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
+  header { padding: 16px 24px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
+  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
+  header .info { color: #64748b; font-size: 12px; }
+  main { padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
+  .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; }
+  .card h2 { margin: 0 0 12px 0; font-size: 14px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #334155; }
+  th { color: #64748b; font-weight: 500; }
+  .ok { color: #4ade80; }
+  .warn { color: #fbbf24; }
+  .err { color: #f87171; }
+  .metric { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
+  .metric .label { color: #94a3b8; }
+  .metric .value { font-variant-numeric: tabular-nums; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
+  code { font-family: "JetBrains Mono", "Consolas", monospace; font-size: 12px; color: #cbd5e1; }
+
+  /* Edit mode styles */
+  .btn { padding: 6px 12px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: 500; }
+  .btn-primary { background: #3b82f6; color: white; }
+  .btn-primary:hover { background: #2563eb; }
+  .btn-secondary { background: #475569; color: white; }
+  .btn-secondary:hover { background: #334155; }
+  .btn-danger { background: #ef4444; color: white; }
+  .btn-danger:hover { background: #dc2626; }
+  .btn-success { background: #10b981; color: white; }
+  .btn-success:hover { background: #059669; }
+  .btn-sm { padding: 4px 8px; font-size: 11px; }
+
+  input[type="text"], input[type="password"], textarea {
+    width: 100%;
+    padding: 8px;
+    background: #0f172a;
+    border: 1px solid #334155;
+    border-radius: 4px;
+    color: #e2e8f0;
+    font-size: 13px;
+    font-family: inherit;
+  }
+  input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
+    outline: none;
+    border-color: #3b82f6;
+  }
+
+  .toggle {
+    display: inline-block;
+    width: 40px;
+    height: 20px;
+    background: #475569;
+    border-radius: 10px;
+    position: relative;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  .toggle.on { background: #10b981; }
+  .toggle::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: left 0.2s;
+  }
+  .toggle.on::after { left: 22px; }
+
+  .form-group { margin-bottom: 12px; }
+  .form-group label { display: block; margin-bottom: 4px; font-size: 12px; color: #94a3b8; }
+
+  .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; }
+  .modal.show { display: flex; align-items: center; justify-content: center; }
+  .modal-content { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 24px; max-width: 500px; width: 90%; }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+  .modal-header h3 { margin: 0; font-size: 16px; }
+  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+
+  .toast { position: fixed; top: 24px; right: 24px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; z-index: 2000; display: none; }
+  .toast.show { display: block; animation: slideIn 0.3s; }
+  .toast.success { border-left: 4px solid #10b981; }
+  .toast.error { border-left: 4px solid #ef4444; }
+  @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <h1>qwen2api</h1>
+    <span class="info">v2 dashboard</span>
+    <span class="info" id="uptime"></span>
+  </div>
+  <div>
+    <button class="btn btn-secondary btn-sm" onclick="toggleEditMode()">
+      <span id="editModeBtn">Edit Mode</span>
+    </button>
+  </div>
+</header>
+<main id="root">Loading…</main>
+
+<!-- Add Token Modal -->
+<div id="addTokenModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Add Token</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeModal('addTokenModal')">×</button>
+    </div>
+    <div class="form-group">
+      <label>Token Value *</label>
+      <input type="password" id="tokenValue" placeholder="Enter Qwen token">
+    </div>
+    <div class="form-group">
+      <label>Name (optional)</label>
+      <input type="text" id="tokenName" placeholder="e.g., token-1">
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('addTokenModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveToken()">Add Token</button>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Aliases Modal -->
+<div id="editAliasesModal" class="modal">
+  <div class="modal-content">
+    <div class="modal-header">
+      <h3>Edit Model Aliases</h3>
+      <button class="btn btn-sm btn-secondary" onclick="closeModal('editAliasesModal')">×</button>
+    </div>
+    <div class="form-group">
+      <label>Aliases (JSON format)</label>
+      <textarea id="aliasesJson" rows="10" placeholder='{"gpt-4": "qwen-max", "gpt-3.5-turbo": "qwen-turbo"}'></textarea>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('editAliasesModal')">Cancel</button>
+      <button class="btn btn-primary" onclick="saveAliases()">Save Aliases</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast Notification -->
+<div id="toast" class="toast"></div>
+
+<script>
+let editMode = false;
+let currentData = null;
+let adminToken = localStorage.getItem('adminToken') || '';
+
+async function refresh() {
+  try {
+    const r = await fetch("/dashboard/data");
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    currentData = await r.json();
+    render(currentData);
+  } catch (e) {
+    document.getElementById("root").innerHTML = "<div class='card err'>Failed to load: " + e.message + "</div>";
+  }
+}
+
+function render(d) {
+  const root = document.getElementById("root");
+  document.getElementById("uptime").textContent = "  uptime: " + Math.round(d.uptime) + "s";
+  let html = "";
+
+  // Tokens card
+  html += "<div class='card'><h2>Tokens";
+  if (editMode) {
+    html += "<button class='btn btn-sm btn-primary' onclick='openAddTokenModal()'>+ Add</button>";
+  }
+  html += "</h2>";
+  if (!d.tokens || d.tokens.length === 0) {
+    html += "<div class='warn'>No tokens configured</div>";
+  } else {
+    html += "<table><tr><th>Name</th><th>Status</th><th>Hits</th><th>Failures</th>";
+    if (editMode) html += "<th>Actions</th>";
+    html += "</tr>";
+    for (const t of d.tokens) {
+      const cls = t.on_cooldown ? "err" : "ok";
+      const status = t.on_cooldown ? "cooldown" : "active";
+      html += "<tr><td>" + (t.name || "—") + "</td><td class='" + cls + "'>" + status + "</td><td>" + t.hits + "</td><td>" + t.failures + "</td>";
+      if (editMode) {
+        html += "<td><button class='btn btn-sm btn-danger' onclick='removeToken(\"" + t.value + "\")'>Remove</button></td>";
+      }
+      html += "</tr>";
+    }
+    html += "</table>";
+  }
+  html += "</div>";
+
+  // Features card
+  html += "<div class='card'><h2>Features</h2><div class='grid2'>";
+  const features = d.features || {};
+  for (const k of Object.keys(features).sort()) {
+    const v = features[k];
+    html += "<div class='label'>" + k.replace(/_/g, ' ') + "</div>";
+    if (editMode) {
+      html += "<div><span class='toggle " + (v ? "on" : "") + "' onclick='toggleFeature(\"" + k + "\")'></span></div>";
+    } else {
+      const cls = v ? "ok" : "warn";
+      html += "<div class='" + cls + "'>" + (v ? "on" : "off") + "</div>";
+    }
+  }
+  html += "</div></div>";
+
+  // Cache card
+  if (d.cache) {
+    html += "<div class='card'><h2>Prompt Cache</h2>";
+    html += "<div class='metric'><span class='label'>Size</span><span class='value'>" + d.cache.size + "</span></div>";
+    html += "<div class='metric'><span class='label'>Hits</span><span class='value ok'>" + d.cache.hits + "</span></div>";
+    html += "<div class='metric'><span class='label'>Misses</span><span class='value warn'>" + d.cache.misses + "</span></div>";
+    html += "</div>";
+  }
+
+  // Metrics card
+  if (d.metrics) {
+    html += "<div class='card'><h2>Metrics</h2>";
+    const counters = d.metrics.counters || {};
+    for (const k of Object.keys(counters).sort()) {
+      html += "<div class='metric'><span class='label'>" + k + "</span><span class='value'>" + counters[k] + "</span></div>";
+    }
+    const gauges = d.metrics.gauges || {};
+    for (const k of Object.keys(gauges).sort()) {
+      html += "<div class='metric'><span class='label'>" + k + "</span><span class='value'>" + gauges[k] + "</span></div>";
+    }
+    html += "</div>";
+  }
+
+  // API Keys card
+  if (d.api_keys && d.api_keys.length > 0) {
+    html += "<div class='card'><h2>API Keys</h2><table><tr><th>Name</th><th>Value</th><th>Expires</th></tr>";
+    for (const k of d.api_keys) {
+      const exp = k.expires_at ? new Date(k.expires_at * 1000).toLocaleDateString() : "never";
+      html += "<tr><td>" + (k.name || "—") + "</td><td><code>" + k.value + "</code></td><td>" + exp + "</td></tr>";
+    }
+    html += "</table></div>";
+  }
+
+  // Model Aliases card
+  if (d.model_aliases && Object.keys(d.model_aliases).length > 0) {
+    html += "<div class='card'><h2>Model Aliases";
+    if (editMode) {
+      html += "<button class='btn btn-sm btn-primary' onclick='openEditAliasesModal()'>Edit</button>";
+    }
+    html += "</h2><div class='grid2'>";
+    for (const [k, v] of Object.entries(d.model_aliases)) {
+      html += "<div class='label'>" + k + "</div><div class='value'>" + v + "</div>";
+    }
+    html += "</div></div>";
+  }
+
+  root.innerHTML = html;
+}
+
+function toggleEditMode() {
+  if (!editMode && !adminToken) {
+    adminToken = prompt("Enter admin token:");
+    if (!adminToken) return;
+    localStorage.setItem('adminToken', adminToken);
+  }
+  editMode = !editMode;
+  document.getElementById('editModeBtn').textContent = editMode ? 'View Mode' : 'Edit Mode';
+  render(currentData);
+}
+
+async function toggleFeature(key) {
+  if (!adminToken) return;
+  const features = {...currentData.features};
+  features[key] = !features[key];
+
+  try {
+    const r = await fetch('/admin/config/features', {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'Bearer ' + adminToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(features)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast('Feature updated', 'success');
+    refresh();
+  } catch (e) {
+    showToast('Failed to update: ' + e.message, 'error');
+  }
+}
+
+function openAddTokenModal() {
+  document.getElementById('addTokenModal').classList.add('show');
+}
+
+function closeModal(id) {
+  document.getElementById(id).classList.remove('show');
+}
+
+async function saveToken() {
+  const value = document.getElementById('tokenValue').value;
+  const name = document.getElementById('tokenName').value;
+
+  if (!value) {
+    showToast('Token value is required', 'error');
+    return;
+  }
+
+  try {
+    const r = await fetch('/admin/config/tokens', {
+      method: 'POST',
+      headers: {
+        'Authorization': 'Bearer ' + adminToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ value, name })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast('Token added', 'success');
+    closeModal('addTokenModal');
+    document.getElementById('tokenValue').value = '';
+    document.getElementById('tokenName').value = '';
+    refresh();
+  } catch (e) {
+    showToast('Failed to add token: ' + e.message, 'error');
+  }
+}
+
+async function removeToken(value) {
+  if (!confirm('Remove this token?')) return;
+
+  try {
+    const r = await fetch('/admin/config/tokens', {
+      method: 'DELETE',
+      headers: {
+        'Authorization': 'Bearer ' + adminToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({ value })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast('Token removed', 'success');
+    refresh();
+  } catch (e) {
+    showToast('Failed to remove token: ' + e.message, 'error');
+  }
+}
+
+function openEditAliasesModal() {
+  document.getElementById('aliasesJson').value = JSON.stringify(currentData.model_aliases || {}, null, 2);
+  document.getElementById('editAliasesModal').classList.add('show');
+}
+
+async function saveAliases() {
+  const json = document.getElementById('aliasesJson').value;
+
+  try {
+    const aliases = JSON.parse(json);
+    const r = await fetch('/admin/config/aliases', {
+      method: 'PUT',
+      headers: {
+        'Authorization': 'Bearer ' + adminToken,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify(aliases)
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    showToast('Aliases updated', 'success');
+    closeModal('editAliasesModal');
+    refresh();
+  } catch (e) {
+    showToast('Failed to save aliases: ' + e.message, 'error');
+  }
+}
+
+function showToast(message, type) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.className = 'toast show ' + type;
+  setTimeout(() => toast.classList.remove('show'), 3000);
+}
+
+// Auto-refresh every 5 seconds
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
