@@ -108,7 +108,11 @@ func (h *handlers) deleteAPIKey(w http.ResponseWriter, r *http.Request) {
 	out := h.deps.Config.APIKeys[:0]
 	deleted := 0
 	for _, k := range h.deps.Config.APIKeys {
-		if k.Value == value {
+		masked := k.Value
+		if len(masked) > 8 {
+			masked = masked[:4] + "..." + masked[len(masked)-4:]
+		}
+		if k.Value == value || k.Name == value || masked == value {
 			deleted++
 			continue
 		}

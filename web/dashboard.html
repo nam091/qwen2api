@@ -1,392 +1,1559 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" data-theme="midnight">
 <head>
 <meta charset="utf-8">
-<title>qwen2api dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>qwen2api - Premium Gateway Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-  * { box-sizing: border-box; }
-  body { font-family: -apple-system, system-ui, "Segoe UI", sans-serif; margin: 0; background: #0f172a; color: #e2e8f0; }
-  header { padding: 16px 24px; background: #1e293b; border-bottom: 1px solid #334155; display: flex; justify-content: space-between; align-items: center; }
-  header h1 { margin: 0; font-size: 18px; font-weight: 600; }
-  header .info { color: #64748b; font-size: 12px; }
-  main { padding: 24px; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; }
-  .card { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 16px; }
-  .card h2 { margin: 0 0 12px 0; font-size: 14px; color: #94a3b8; text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between; align-items: center; }
-  table { width: 100%; border-collapse: collapse; font-size: 13px; }
-  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid #334155; }
-  th { color: #64748b; font-weight: 500; }
-  .ok { color: #4ade80; }
-  .warn { color: #fbbf24; }
-  .err { color: #f87171; }
-  .metric { display: flex; justify-content: space-between; padding: 4px 0; font-size: 13px; }
-  .metric .label { color: #94a3b8; }
-  .metric .value { font-variant-numeric: tabular-nums; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 4px 16px; }
-  code { font-family: "JetBrains Mono", "Consolas", monospace; font-size: 12px; color: #cbd5e1; }
-
-  /* Edit mode styles */
-  .btn { padding: 6px 12px; border: none; border-radius: 4px; font-size: 12px; cursor: pointer; font-weight: 500; }
-  .btn-primary { background: #3b82f6; color: white; }
-  .btn-primary:hover { background: #2563eb; }
-  .btn-secondary { background: #475569; color: white; }
-  .btn-secondary:hover { background: #334155; }
-  .btn-danger { background: #ef4444; color: white; }
-  .btn-danger:hover { background: #dc2626; }
-  .btn-success { background: #10b981; color: white; }
-  .btn-success:hover { background: #059669; }
-  .btn-sm { padding: 4px 8px; font-size: 11px; }
-
-  input[type="text"], input[type="password"], textarea {
-    width: 100%;
-    padding: 8px;
-    background: #0f172a;
-    border: 1px solid #334155;
-    border-radius: 4px;
-    color: #e2e8f0;
-    font-size: 13px;
-    font-family: inherit;
-  }
-  input[type="text"]:focus, input[type="password"]:focus, textarea:focus {
-    outline: none;
-    border-color: #3b82f6;
+  /* DESIGN SYSTEM & THEMES (9ROUTER STYLE) */
+  :root {
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  .toggle {
-    display: inline-block;
-    width: 40px;
-    height: 20px;
-    background: #475569;
-    border-radius: 10px;
+  /* Theme: 9Router Charcoal (Default Dark) */
+  [data-theme="midnight"] {
+    --bg-main: #1a1a1a;
+    --bg-card: rgba(38, 38, 38, 0.75);
+    --bg-header: rgba(26, 26, 26, 0.8);
+    --bg-sidebar: rgba(30, 30, 30, 0.85);
+    --border-color: #333333;
+    --border-active: #E56A4A;
+    --text-primary: #ededed;
+    --text-secondary: #9ca3af;
+    --text-muted: #6b7280;
+    --accent-color: #E56A4A;
+    --accent-glow: rgba(229, 106, 74, 0.25);
+    --color-success: #22c55e;
+    --color-warning: #fbbf24;
+    --color-danger: #ef4444;
+    --card-shadow: 0 16px 48px -8px rgba(0,0,0,0.55);
+    --glass-blur: blur(20px);
+  }
+
+  /* Theme: 9Router Cream (Light Mode) */
+  [data-theme="light"] {
+    --bg-main: #FDFAF6;
+    --bg-card: rgba(255, 255, 255, 0.85);
+    --bg-header: rgba(253, 250, 246, 0.8);
+    --bg-sidebar: rgba(244, 241, 236, 0.85);
+    --border-color: #e5e7eb;
+    --border-active: #E56A4A;
+    --text-primary: #0a0a0a;
+    --text-secondary: #6B7280;
+    --text-muted: #9CA3AF;
+    --accent-color: #E56A4A;
+    --accent-glow: rgba(229, 106, 74, 0.15);
+    --color-success: #10B981;
+    --color-warning: #F59E0B;
+    --color-danger: #cf222e;
+    --card-shadow: 0 12px 36px -8px rgba(15,23,42,0.10);
+    --glass-blur: blur(20px);
+  }
+
+  /* Theme: Cyberpunk Neon */
+  [data-theme="cyberpunk"] {
+    --bg-main: #050508;
+    --bg-card: rgba(13, 13, 21, 0.85);
+    --bg-header: rgba(15, 15, 27, 0.8);
+    --bg-sidebar: rgba(7, 7, 13, 0.85);
+    --border-color: #ff007f33;
+    --border-active: #00f0ff;
+    --text-primary: #00ffff;
+    --text-secondary: #ff00ff;
+    --text-muted: #70427d;
+    --accent-color: #ff00ff;
+    --accent-glow: rgba(255, 0, 255, 0.25);
+    --color-success: #39ff14;
+    --color-warning: #ffff00;
+    --color-danger: #ff003c;
+    --card-shadow: 0 0 20px rgba(255, 0, 255, 0.15);
+    --glass-blur: blur(12px);
+  }
+
+  /* Theme: Emerald Glass */
+  [data-theme="emerald"] {
+    --bg-main: #06100c;
+    --bg-card: rgba(10, 28, 20, 0.75);
+    --bg-header: rgba(11, 34, 24, 0.8);
+    --bg-sidebar: rgba(8, 26, 18, 0.85);
+    --border-color: rgba(16, 185, 129, 0.15);
+    --border-active: #10b981;
+    --text-primary: #ecfdf5;
+    --text-secondary: #a7f3d0;
+    --text-muted: #34d39966;
+    --accent-color: #10b981;
+    --accent-glow: rgba(16, 185, 129, 0.25);
+    --color-success: #34d399;
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+    --card-shadow: 0 8px 32px 0 rgba(4, 30, 20, 0.5);
+    --glass-blur: blur(16px);
+  }
+
+  /* CORE STYLING */
+  * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-main);
+    color: var(--text-primary);
+    min-height: 100vh;
+    display: flex;
+    overflow-x: hidden;
     position: relative;
-    cursor: pointer;
-    transition: background 0.2s;
+    transition: var(--transition-smooth);
   }
-  .toggle.on { background: #10b981; }
-  .toggle::after {
-    content: '';
+
+  /* Dot Grid Background Pattern */
+  body::before {
+    content: "";
     position: absolute;
-    width: 16px;
-    height: 16px;
-    background: white;
-    border-radius: 50%;
-    top: 2px;
-    left: 2px;
-    transition: left 0.2s;
+    inset: 0;
+    background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
+    background-size: 24px 24px;
+    opacity: 0.45;
+    pointer-events: none;
+    z-index: 0;
   }
-  .toggle.on::after { left: 22px; }
 
-  .form-group { margin-bottom: 12px; }
-  .form-group label { display: block; margin-bottom: 4px; font-size: 12px; color: #94a3b8; }
+  /* SIDEBAR */
+  aside {
+    width: 280px;
+    background: var(--bg-sidebar);
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    padding: 24px;
+    flex-shrink: 0;
+    transition: var(--transition-smooth);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    z-index: 50;
+  }
 
-  .modal { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); z-index: 1000; }
-  .modal.show { display: flex; align-items: center; justify-content: center; }
-  .modal-content { background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 24px; max-width: 500px; width: 90%; }
-  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
-  .modal-header h3 { margin: 0; font-size: 16px; }
-  .modal-footer { display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px; }
+  /* macOS Traffic Lights */
+  .traffic-lights {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 20px;
+  }
+  .traffic-light {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+  }
+  .traffic-light.red { background: #FF5F56; }
+  .traffic-light.yellow { background: #FFBD2E; }
+  .traffic-light.green { background: #27C93F; }
 
-  .toast { position: fixed; top: 24px; right: 24px; background: #1e293b; border: 1px solid #334155; border-radius: 8px; padding: 12px 16px; z-index: 2000; display: none; }
-  .toast.show { display: block; animation: slideIn 0.3s; }
-  .toast.success { border-left: 4px solid #10b981; }
-  .toast.error { border-left: 4px solid #ef4444; }
-  @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+  .logo-area {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 32px;
+  }
+  .logo-icon {
+    width: 36px;
+    height: 36px;
+    background: linear-gradient(135deg, var(--accent-color), #ff8a6c);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 0 15px var(--accent-glow);
+  }
+  .logo-icon svg { width: 20px; height: 20px; fill: white; }
+  .logo-text { font-size: 20px; font-weight: 700; background: linear-gradient(to right, var(--text-primary), var(--text-secondary)); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+
+  .status-pill {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 14px;
+    background: rgba(255, 255, 255, 0.03);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 24px;
+  }
+  .status-dot {
+    width: 8px;
+    height: 8px;
+    background-color: var(--color-success);
+    border-radius: 50%;
+    box-shadow: 0 0 10px var(--color-success);
+    animation: pulse 2s infinite;
+  }
+
+  .nav-menu { list-style: none; display: flex; flex-direction: column; gap: 6px; flex-grow: 1; }
+  .nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 16px;
+    border-radius: 8px;
+    color: var(--text-secondary);
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    text-decoration: none;
+    transition: var(--transition-smooth);
+  }
+  .nav-item:hover, .nav-item.active {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+    border-left: 3px solid var(--accent-color);
+  }
+  .nav-item svg { width: 18px; height: 18px; fill: currentColor; }
+
+  /* THEME SELECTOR */
+  .theme-box {
+    margin-top: auto;
+    padding: 14px;
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+  }
+  .theme-box-title { font-size: 11px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 10px; font-weight: 600; letter-spacing: 0.5px; }
+  .theme-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .theme-btn {
+    height: 32px;
+    border-radius: 6px;
+    border: 2px solid transparent;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    position: relative;
+  }
+  .theme-btn:hover { transform: scale(1.15); }
+  .theme-btn.active { border-color: var(--accent-color); }
+  .theme-btn::after {
+    content: attr(data-tooltip);
+    position: absolute;
+    bottom: 38px;
+    left: 50%;
+    transform: translateX(-50%) scale(0.8);
+    background: #000;
+    color: #fff;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: var(--transition-smooth);
+  }
+  .theme-btn:hover::after { opacity: 1; transform: translateX(-50%) scale(1); }
+
+  /* MAIN CONTENT AREA */
+  main {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    transition: var(--transition-smooth);
+    z-index: 1;
+  }
+
+  header {
+    height: 80px;
+    padding: 0 40px;
+    border-bottom: 1px solid var(--border-color);
+    background: var(--bg-header);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    transition: var(--transition-smooth);
+  }
+  header h1 { font-size: 20px; font-weight: 600; }
+  .header-actions { display: flex; align-items: center; gap: 16px; }
+
+  /* UTILITY BUTTONS */
+  .btn {
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    border: 1px solid transparent;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: var(--transition-smooth);
+  }
+  
+  /* CTA SHIMMER BUTTONS (9ROUTER SIGNATURE) */
+  .btn-primary {
+    background: var(--accent-color);
+    color: white;
+    box-shadow: 0 8px 24px -8px var(--accent-glow);
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .btn-primary::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    transform: translateX(-120%) skewX(-20deg);
+    animation: ctaShimmer 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
+  .btn-primary:hover {
+    background: var(--accent-color);
+    box-shadow: 0 12px 32px -8px var(--accent-glow);
+    transform: translateY(-1px);
+  }
+  
+  .btn-secondary {
+    background: rgba(255, 255, 255, 0.05);
+    border-color: var(--border-color);
+    color: var(--text-primary);
+  }
+  .btn-secondary:hover {
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .btn-danger {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.2);
+    color: var(--color-danger);
+  }
+  .btn-danger:hover {
+    background: var(--color-danger);
+    color: white;
+  }
+  .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 6px; }
+
+  /* CONTAINER LAYOUT */
+  .content-body {
+    padding: 40px;
+    flex-grow: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 32px;
+  }
+
+  .tab-panel { display: none; }
+  .tab-panel.active { display: block; animation: fadeIn 0.3s ease-in-out; }
+
+  /* CARDS & METRICS */
+  .grid-stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 24px;
+  }
+  .card-stat {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: var(--card-shadow);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    transition: var(--transition-smooth);
+    position: relative;
+    overflow: hidden;
+  }
+  .card-stat:hover {
+    transform: translateY(-2px);
+    border-color: var(--border-active);
+    box-shadow: var(--card-shadow), 0 0 16px var(--accent-glow);
+  }
+  .card-stat-title { font-size: 12px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; letter-spacing: 0.5px; margin-bottom: 8px; }
+  .card-stat-value { font-size: 28px; font-weight: 700; font-variant-numeric: tabular-nums; display: flex; align-items: baseline; gap: 8px; }
+  .card-stat-sub { font-size: 12px; color: var(--text-secondary); margin-top: 6px; }
+  .card-stat-icon { position: absolute; right: 24px; top: 24px; width: 32px; height: 32px; color: var(--text-muted); opacity: 0.3; }
+
+  .grid-details {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 32px;
+  }
+  @media(max-width: 1024px) {
+    .grid-details { grid-template-columns: 1fr; }
+  }
+
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 32px;
+    box-shadow: var(--card-shadow);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    transition: var(--transition-smooth);
+  }
+  .card:hover {
+    border-color: var(--border-active);
+    box-shadow: var(--card-shadow), 0 0 16px var(--accent-glow);
+  }
+  .card-title-area {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+  }
+  .card h2 { font-size: 18px; font-weight: 600; }
+
+  /* TABLES & LISTS */
+  table { width: 100%; border-collapse: collapse; text-align: left; }
+  th, td { padding: 14px 16px; border-bottom: 1px solid var(--border-color); }
+  th { font-size: 12px; text-transform: uppercase; color: var(--text-muted); font-weight: 600; }
+  td { font-size: 14px; }
+  tr:last-child td { border-bottom: none; }
+  tr:hover td { background: rgba(255, 255, 255, 0.01); }
+
+  /* FORM INPUTS */
+  input[type="text"], input[type="password"], input[type="number"], select, textarea {
+    width: 100%;
+    padding: 12px 16px;
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: inherit;
+    transition: var(--transition-smooth);
+  }
+  input:focus, select:focus, textarea:focus {
+    border-color: var(--border-active);
+    box-shadow: 0 0 10px var(--accent-glow);
+    background: rgba(0, 0, 0, 0.3);
+  }
+  .form-group { margin-bottom: 20px; }
+  .form-group label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
+
+  /* SEARCH BAR */
+  .search-wrapper { position: relative; margin-bottom: 16px; }
+  .search-wrapper input { padding-left: 40px; }
+  .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; fill: var(--text-muted); }
+
+  /* GLASS TOGGLES & SWITCHES */
+  .switch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
+  .switch-card {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 20px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    transition: var(--transition-smooth);
+  }
+  .switch-card:hover { background: rgba(255, 255, 255, 0.04); border-color: var(--border-active); }
+  .switch-info { max-width: 75%; }
+  .switch-name { font-size: 14px; font-weight: 600; margin-bottom: 4px; }
+  .switch-desc { font-size: 12px; color: var(--text-muted); line-height: 1.4; }
+
+  .toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 46px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  .toggle-switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background-color: rgba(255, 255, 255, 0.15);
+    border-radius: 34px;
+    transition: .3s;
+  }
+  .slider:before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background-color: white;
+    border-radius: 50%;
+    transition: .3s;
+  }
+  input:checked + .slider { background-color: var(--accent-color); }
+  input:checked + .slider:before { transform: translateX(22px); }
+
+  /* BADGES */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 4px 8px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+  }
+  .badge-success { background: rgba(34, 197, 94, 0.15); color: var(--color-success); border: 1px solid rgba(34, 197, 94, 0.2); }
+  .badge-warning { background: rgba(251, 191, 36, 0.15); color: var(--color-warning); border: 1px solid rgba(251, 191, 36, 0.2); }
+  .badge-danger { background: rgba(239, 68, 68, 0.15); color: var(--color-danger); border: 1px solid rgba(239, 68, 68, 0.2); }
+
+  /* ALIAS ROW & INLINE FORMS */
+  .alias-table-editor td { vertical-align: middle; }
+  .alias-input-inline { background: rgba(0, 0, 0, 0.15); padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+
+  /* DYNAMIC MODALS */
+  .modal {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(8px);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: var(--transition-smooth);
+    z-index: 1000;
+  }
+  .modal.show { opacity: 1; pointer-events: auto; }
+  .modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    width: 90%;
+    max-width: 500px;
+    padding: 32px;
+    box-shadow: var(--card-shadow);
+    transform: scale(0.9);
+    transition: var(--transition-smooth);
+  }
+  .modal.show .modal-content { transform: scale(1); }
+  .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+  .modal-header h3 { font-size: 18px; font-weight: 600; }
+  .modal-close { background: none; border: none; font-size: 24px; color: var(--text-secondary); cursor: pointer; }
+  .modal-footer { display: flex; gap: 12px; justify-content: flex-end; margin-top: 24px; }
+
+  /* FLOATING TOASTS */
+  .toast-container { position: fixed; top: 24px; right: 24px; display: flex; flex-direction: column; gap: 10px; z-index: 2000; }
+  .toast {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 14px 20px;
+    color: var(--text-primary);
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: var(--card-shadow);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    transform: translateX(120%);
+    animation: toastSlideIn 0.3s forwards cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+  }
+  .toast.success { border-left: 4px solid var(--color-success); }
+  .toast.error { border-left: 4px solid var(--color-danger); }
+  .toast.info { border-left: 4px solid var(--accent-color); }
+  @keyframes toastSlideIn { to { transform: translateX(0); } }
+
+  /* PASSWORD OVERLAY */
+  #adminAuthOverlay {
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: var(--bg-main);
+    z-index: 9999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: var(--transition-smooth);
+  }
+  #adminAuthOverlay.show { opacity: 1; pointer-events: auto; }
+  .auth-card {
+    width: 90%;
+    max-width: 400px;
+    text-align: center;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    padding: 40px;
+    border-radius: 20px;
+    box-shadow: var(--card-shadow);
+  }
+
+  /* KEY GENERATOR AREA */
+  .key-gen-box {
+    display: flex;
+    gap: 8px;
+  }
+
+  /* ANIMATIONS */
+  @keyframes pulse {
+    0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.5); }
+    70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(34, 197, 94, 0); }
+    100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(34, 197, 94, 0); }
+  }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  
+  @keyframes ctaShimmer {
+    0% { transform: translateX(-120%) skewX(-20deg); }
+    100% { transform: translateX(220%) skewX(-20deg); }
+  }
+
+  /* DECORATIVE MINI CHART */
+  .mini-spark {
+    width: 100%;
+    height: 40px;
+    margin-top: 10px;
+  }
 </style>
 </head>
 <body>
-<header>
-  <div>
-    <h1>qwen2api</h1>
-    <span class="info">v2 dashboard</span>
-    <span class="info" id="uptime"></span>
-  </div>
-  <div>
-    <button class="btn btn-secondary btn-sm" onclick="toggleEditMode()">
-      <span id="editModeBtn">Edit Mode</span>
-    </button>
-  </div>
-</header>
-<main id="root">Loading…</main>
 
-<!-- Add Token Modal -->
-<div id="addTokenModal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3>Add Token</h3>
-      <button class="btn btn-sm btn-secondary" onclick="closeModal('addTokenModal')">×</button>
-    </div>
-    <div class="form-group">
-      <label>Token Value *</label>
-      <input type="password" id="tokenValue" placeholder="Enter Qwen token">
-    </div>
-    <div class="form-group">
-      <label>Name (optional)</label>
-      <input type="text" id="tokenName" placeholder="e.g., token-1">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('addTokenModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveToken()">Add Token</button>
+  <!-- ADMIN AUTHENTICATION SCREEN -->
+  <div id="adminAuthOverlay">
+    <div class="auth-card">
+      <div class="logo-icon" style="margin: 0 auto 20px;">
+        <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+      </div>
+      <h2 style="margin-bottom: 8px;">Authorization Required</h2>
+      <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 24px;">Please enter your admin token to manage endpoints</p>
+      <div class="form-group" style="text-align: left;">
+        <input type="password" id="authAdminToken" placeholder="Enter Token Value">
+      </div>
+      <button class="btn btn-primary" style="width: 100%;" onclick="submitAuthToken()">Unlock Dashboard</button>
     </div>
   </div>
-</div>
 
-<!-- Edit Aliases Modal -->
-<div id="editAliasesModal" class="modal">
-  <div class="modal-content">
-    <div class="modal-header">
-      <h3>Edit Model Aliases</h3>
-      <button class="btn btn-sm btn-secondary" onclick="closeModal('editAliasesModal')">×</button>
+  <!-- TOAST CONTAINER -->
+  <div id="toastContainer" class="toast-container"></div>
+
+  <!-- SIDEBAR NAVIGATION -->
+  <aside>
+    <!-- macOS Traffic Lights -->
+    <div class="traffic-lights">
+      <div class="traffic-light red"></div>
+      <div class="traffic-light yellow"></div>
+      <div class="traffic-light green"></div>
     </div>
-    <div class="form-group">
-      <label>Aliases (JSON format)</label>
-      <textarea id="aliasesJson" rows="10" placeholder='{"gpt-4": "qwen-max", "gpt-3.5-turbo": "qwen-turbo"}'></textarea>
+
+    <div class="logo-area">
+      <div class="logo-icon">
+        <svg viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.99L19.53 19H4.47L12 5.99zM13 16h-2v2h2v-2zm0-6h-2v4h2v-4z"/></svg>
+      </div>
+      <div class="logo-text">qwen2api</div>
     </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" onclick="closeModal('editAliasesModal')">Cancel</button>
-      <button class="btn btn-primary" onclick="saveAliases()">Save Aliases</button>
+
+    <div class="status-pill">
+      <div class="status-dot"></div>
+      <span>Gateway is running</span>
+    </div>
+
+    <ul class="nav-menu">
+      <li class="nav-item active" onclick="switchTab('overview', this)">
+        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H6v-2h8v2zm3-4H6v-2h11v2zm0-4H6V7h11v2z"/></svg>
+        Overview
+      </li>
+      <li class="nav-item" onclick="switchTab('tokens', this)">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
+        Tokens Pool
+      </li>
+      <li class="nav-item" onclick="switchTab('features', this)">
+        <svg viewBox="0 0 24 24"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>
+        Feature Toggles
+      </li>
+      <li class="nav-item" onclick="switchTab('aliases', this)">
+        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+        Model Aliases
+      </li>
+      <li class="nav-item" onclick="switchTab('keys', this)">
+        <svg viewBox="0 0 24 24"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
+        API Key Rotation
+      </li>
+    </ul>
+
+    <!-- Theme Selection Component -->
+    <div class="theme-box">
+      <div class="theme-box-title">Giao diện</div>
+      <div class="theme-grid">
+        <button class="theme-btn active" style="background: #E56A4A;" data-tooltip="9Router Charcoal" onclick="setTheme('midnight', this)"></button>
+        <button class="theme-btn" style="background: #ff00ff;" data-tooltip="Cyberpunk Neon" onclick="setTheme('cyberpunk', this)"></button>
+        <button class="theme-btn" style="background: #10b981;" data-tooltip="Forest Aura" onclick="setTheme('emerald', this)"></button>
+        <button class="theme-btn" style="background: #FDFAF6; border: 1px solid #e5e7eb;" data-tooltip="9Router Cream" onclick="setTheme('light', this)"></button>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN VIEWPORT -->
+  <main>
+    <header>
+      <h1 id="pageTitle">Dashboard Overview</h1>
+      <div class="header-actions">
+        <div id="uptimeDisplay" style="font-size: 13px; color: var(--text-muted);">Uptime: --</div>
+        <button class="btn btn-secondary btn-sm" onclick="lockAdminConsole()">Log out</button>
+      </div>
+    </header>
+
+    <div class="content-body">
+      
+      <!-- OVERVIEW PANEL -->
+      <div id="overview" class="tab-panel active">
+        <div class="grid-stats" style="margin-bottom: 32px;">
+          <div class="card-stat">
+            <div class="card-stat-title">Active Requests</div>
+            <div class="card-stat-value" id="statActiveRequests">0</div>
+            <div class="card-stat-sub">Current ongoing streams</div>
+            <svg class="card-stat-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
+            <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 10 Q 25 15 50 8 T 100 12" fill="none" stroke="var(--accent-color)" stroke-width="1.5"/></svg>
+          </div>
+          <div class="card-stat">
+            <div class="card-stat-title">Total Requests</div>
+            <div class="card-stat-value" id="statTotalRequests">0</div>
+            <div class="card-stat-sub">Hits on all model endpoints</div>
+            <svg class="card-stat-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H6v-2h8v2zm3-4H6v-2h11v2zm0-4H6V7h11v2z"/></svg>
+            <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 15 Q 30 5 60 18 T 100 5" fill="none" stroke="var(--color-success)" stroke-width="1.5"/></svg>
+          </div>
+          <div class="card-stat">
+            <div class="card-stat-title">Tokens Count</div>
+            <div class="card-stat-value" id="statTokenCount">0</div>
+            <div class="card-stat-sub" id="statCooldownCount">0 on cooldown</div>
+            <svg class="card-stat-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 8 Q 20 18 50 12 T 100 16" fill="none" stroke="var(--color-warning)" stroke-width="1.5"/></svg>
+          </div>
+          <div class="card-stat">
+            <div class="card-stat-title">Cache Hit Rate</div>
+            <div class="card-stat-value" id="statCacheHitRate">0%</div>
+            <div class="card-stat-sub" id="statCacheRatio">0 hits / 0 misses</div>
+            <svg class="card-stat-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H6v-2h6v2zm4-4H6v-2h10v2zm0-4H6V7h10v2z"/></svg>
+            <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 12 Q 40 4 80 14 T 100 2" fill="none" stroke="var(--accent-color)" stroke-width="1.5"/></svg>
+          </div>
+        </div>
+
+        <div class="grid-details">
+          <div class="card">
+            <div class="card-title-area">
+              <h2>Recent Token Pools Status</h2>
+              <button class="btn btn-secondary btn-sm" onclick="switchTab('tokens')">Manage Pool</button>
+            </div>
+            <div style="overflow-x: auto;">
+              <table id="overviewTokensTable">
+                <thead>
+                  <tr>
+                    <th>Friendly Name</th>
+                    <th>Availability</th>
+                    <th>Success Hits</th>
+                    <th>Cooldown Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr><td colspan="4" style="text-align: center; color: var(--text-muted);">Fetching token data...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card" style="display: flex; flex-direction: column; justify-content: space-between;">
+            <div>
+              <div class="card-title-area">
+                <h2>Prompt Cache</h2>
+              </div>
+              <div style="margin-bottom: 24px;">
+                <div style="display: flex; justify-content: space-between; margin-bottom: 8px;">
+                  <span style="font-size: 13px; color: var(--text-secondary);">Cache Usage</span>
+                  <span id="overviewCacheSize" style="font-size: 13px; font-weight: 600;">0 Entries</span>
+                </div>
+                <div style="width: 100%; height: 8px; background: rgba(255,255,255,0.05); border-radius: 4px; overflow: hidden;">
+                  <div id="overviewCacheProgress" style="width: 0%; height: 100%; background: var(--accent-color); transition: var(--transition-smooth);"></div>
+                </div>
+              </div>
+              <div style="display: flex; flex-direction: column; gap: 12px;">
+                <div style="display: flex; justify-content: space-between; border-bottom: 1px solid var(--border-color); padding-bottom: 8px;">
+                  <span style="font-size: 13px; color: var(--text-secondary);">Successful Hits</span>
+                  <span id="overviewCacheHits" style="font-size: 13px; font-weight: 600; color: var(--color-success)">0</span>
+                </div>
+                <div style="display: flex; justify-content: space-between;">
+                  <span style="font-size: 13px; color: var(--text-secondary);">Misses</span>
+                  <span id="overviewCacheMisses" style="font-size: 13px; font-weight: 600; color: var(--color-warning)">0</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- TOKENS PANEL -->
+      <div id="tokens" class="tab-panel">
+        <div class="card">
+          <div class="card-title-area">
+            <h2>Upstream Qwen Tokens Pool</h2>
+            <button class="btn btn-primary" onclick="openModal('addTokenModal')">
+              <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              Add New Token
+            </button>
+          </div>
+          
+          <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <input type="text" id="tokenSearchInput" oninput="filterTokens()" placeholder="Filter tokens by friendly name or value snippet...">
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Friendly Name</th>
+                  <th>Masked Token Value</th>
+                  <th>Pool Status</th>
+                  <th>Hits count</th>
+                  <th>Cooldown Failures</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="tokensTableBody">
+                <!-- Dynamically loaded -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- FEATURES PANEL -->
+      <div id="features" class="tab-panel">
+        <div class="card">
+          <div class="card-title-area">
+            <h2>Advanced Feature Flags</h2>
+            <div style="font-size: 13px; color: var(--text-muted);">Real-time toggle backend features</div>
+          </div>
+          <div class="switch-grid" id="featuresContainer">
+            <!-- Dynamically populated -->
+          </div>
+        </div>
+      </div>
+
+      <!-- MODEL ALIASES PANEL -->
+      <div id="aliases" class="tab-panel">
+        <div class="card">
+          <div class="card-title-area">
+            <h2>Model Compatibility Aliases</h2>
+            <button class="btn btn-primary" onclick="openAddAliasModal()">
+              <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              Add Custom Alias
+            </button>
+          </div>
+          
+          <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <input type="text" id="aliasSearchInput" oninput="filterAliases()" placeholder="Filter aliases by request model or real target model...">
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table class="alias-table-editor">
+              <thead>
+                <tr>
+                  <th>Requested Model Alias</th>
+                  <th>Real Target Upstream Model</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="aliasesTableBody">
+                <!-- Dynamically loaded -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- API KEY ROTATION PANEL -->
+      <div id="keys" class="tab-panel">
+        <div class="grid-details" style="grid-template-columns: 1fr 1.3fr;">
+          <!-- Left side: generator and list -->
+          <div class="card">
+            <div class="card-title-area">
+              <h2>Authorized Client Keys</h2>
+            </div>
+            
+            <div style="overflow-x: auto;">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Friendly Name</th>
+                    <th>Masked Value</th>
+                    <th style="text-align: right;">Actions</th>
+                  </tr>
+                </thead>
+                <tbody id="apiKeysTableBody">
+                  <!-- Dynamically populated -->
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <!-- Right side: New key form with visual secure generator -->
+          <div class="card">
+            <h2>Generate Secure API Key</h2>
+            <p style="color: var(--text-secondary); font-size: 13px; margin: 8px 0 24px;">Create a secure cryptographic key with options like friendly names and expiration dates.</p>
+            
+            <div class="form-group">
+              <label>API Key Value</label>
+              <div class="key-gen-box">
+                <input type="text" id="newKeyVal" placeholder="sk-qwen-...">
+                <button class="btn btn-secondary" onclick="generateRandomKeyStr()">Generate</button>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label>Friendly Name Tag</label>
+              <input type="text" id="newKeyName" placeholder="e.g. Production Frontend">
+            </div>
+
+            <div class="form-group">
+              <label>Expiration Policy</label>
+              <select id="newKeyExpiry">
+                <option value="0">Never Expire</option>
+                <option value="1">Expire in 1 Day</option>
+                <option value="7">Expire in 7 Days</option>
+                <option value="30">Expire in 30 Days</option>
+              </select>
+            </div>
+
+            <div style="margin-top: 32px; display: flex; justify-content: flex-end;">
+              <button class="btn btn-primary" onclick="saveNewApiKey()">Authorize Key</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- ADD TOKEN MODAL -->
+  <div id="addTokenModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Add Upstream Qwen Token</h3>
+        <button class="modal-close" onclick="closeModal('addTokenModal')">×</button>
+      </div>
+      <div class="form-group">
+        <label>Token Authentication Value *</label>
+        <input type="password" id="tokenValue" placeholder="Paste your chat.qwen.ai session token">
+      </div>
+      <div class="form-group">
+        <label>Friendly Pool Name</label>
+        <input type="text" id="tokenName" placeholder="e.g. pool-acc-01">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('addTokenModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveToken()">Save Token</button>
+      </div>
     </div>
   </div>
-</div>
 
-<!-- Toast Notification -->
-<div id="toast" class="toast"></div>
+  <!-- ADD MODEL ALIAS MODAL -->
+  <div id="addAliasModal" class="modal">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3>Create Model Alias mapping</h3>
+        <button class="modal-close" onclick="closeModal('addAliasModal')">×</button>
+      </div>
+      <div class="form-group">
+        <label>Requested Model Name (Alias) *</label>
+        <input type="text" id="aliasKey" placeholder="e.g. gpt-4-turbo">
+      </div>
+      <div class="form-group">
+        <label>Real Upstream Target Model *</label>
+        <input type="text" id="aliasValue" placeholder="e.g. qwen-max">
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal('addAliasModal')">Cancel</button>
+        <button class="btn btn-primary" onclick="saveAliasItem()">Create Alias</button>
+      </div>
+    </div>
+  </div>
 
-<script>
-let editMode = false;
-let currentData = null;
-let adminToken = localStorage.getItem('adminToken') || '';
+  <script>
+    let currentData = null;
+    let adminToken = localStorage.getItem('adminToken') || '';
 
-async function refresh() {
-  try {
-    const r = await fetch("/dashboard/data");
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    currentData = await r.json();
-    render(currentData);
-  } catch (e) {
-    document.getElementById("root").innerHTML = "<div class='card err'>Failed to load: " + e.message + "</div>";
-  }
-}
+    // Active Navigation State
+    function switchTab(tabId, el) {
+      document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+      
+      document.getElementById(tabId).classList.add('active');
+      if (el) el.classList.add('active');
 
-function render(d) {
-  const root = document.getElementById("root");
-  document.getElementById("uptime").textContent = "  uptime: " + Math.round(d.uptime) + "s";
-  let html = "";
+      const titles = {
+        'overview': 'Dashboard Overview',
+        'tokens': 'Upstream Qwen Tokens Pool',
+        'features': 'Advanced Feature Flags',
+        'aliases': 'Model Compatibility Aliases',
+        'keys': 'API Key Rotation Manager'
+      };
+      document.getElementById('pageTitle').textContent = titles[tabId] || 'Dashboard';
+    }
 
-  // Tokens card
-  html += "<div class='card'><h2>Tokens";
-  if (editMode) {
-    html += "<button class='btn btn-sm btn-primary' onclick='openAddTokenModal()'>+ Add</button>";
-  }
-  html += "</h2>";
-  if (!d.tokens || d.tokens.length === 0) {
-    html += "<div class='warn'>No tokens configured</div>";
-  } else {
-    html += "<table><tr><th>Name</th><th>Status</th><th>Hits</th><th>Failures</th>";
-    if (editMode) html += "<th>Actions</th>";
-    html += "</tr>";
-    for (const t of d.tokens) {
-      const cls = t.on_cooldown ? "err" : "ok";
-      const status = t.on_cooldown ? "cooldown" : "active";
-      html += "<tr><td>" + (t.name || "—") + "</td><td class='" + cls + "'>" + status + "</td><td>" + t.hits + "</td><td>" + t.failures + "</td>";
-      if (editMode) {
-        html += "<td><button class='btn btn-sm btn-danger' onclick='removeToken(\"" + t.value + "\")'>Remove</button></td>";
+    // THEME HANDLING
+    function setTheme(themeName, btnEl) {
+      document.documentElement.setAttribute('data-theme', themeName);
+      localStorage.setItem('dashboard-theme', themeName);
+      
+      document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+      if (btnEl) {
+        btnEl.classList.add('active');
+      } else {
+        const matchingBtn = document.querySelector(`.theme-btn[data-tooltip*="${themeName === 'midnight' ? 'Charcoal' : themeName === 'cyberpunk' ? 'Cyber' : themeName === 'emerald' ? 'Forest' : 'Cream'}"]`);
+        if (matchingBtn) matchingBtn.classList.add('active');
       }
-      html += "</tr>";
     }
-    html += "</table>";
-  }
-  html += "</div>";
 
-  // Features card
-  html += "<div class='card'><h2>Features</h2><div class='grid2'>";
-  const features = d.features || {};
-  for (const k of Object.keys(features).sort()) {
-    const v = features[k];
-    html += "<div class='label'>" + k.replace(/_/g, ' ') + "</div>";
-    if (editMode) {
-      html += "<div><span class='toggle " + (v ? "on" : "") + "' onclick='toggleFeature(\"" + k + "\")'></span></div>";
-    } else {
-      const cls = v ? "ok" : "warn";
-      html += "<div class='" + cls + "'>" + (v ? "on" : "off") + "</div>";
+    // Load active theme
+    const savedTheme = localStorage.getItem('dashboard-theme') || 'midnight';
+    setTheme(savedTheme);
+
+    // API CONFIG REQUESTS
+    async function refresh() {
+      if (!adminToken) {
+        showAuthOverlay();
+        return;
+      }
+
+      try {
+        const r = await fetch("/dashboard/data");
+        if (r.status === 401) {
+          showAuthOverlay();
+          return;
+        }
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        
+        currentData = await r.json();
+        hideAuthOverlay();
+        renderDashboard(currentData);
+      } catch (e) {
+        showToast("Connection to backend lost: " + e.message, "error");
+      }
     }
-  }
-  html += "</div></div>";
 
-  // Cache card
-  if (d.cache) {
-    html += "<div class='card'><h2>Prompt Cache</h2>";
-    html += "<div class='metric'><span class='label'>Size</span><span class='value'>" + d.cache.size + "</span></div>";
-    html += "<div class='metric'><span class='label'>Hits</span><span class='value ok'>" + d.cache.hits + "</span></div>";
-    html += "<div class='metric'><span class='label'>Misses</span><span class='value warn'>" + d.cache.misses + "</span></div>";
-    html += "</div>";
-  }
-
-  // Metrics card
-  if (d.metrics) {
-    html += "<div class='card'><h2>Metrics</h2>";
-    const counters = d.metrics.counters || {};
-    for (const k of Object.keys(counters).sort()) {
-      html += "<div class='metric'><span class='label'>" + k + "</span><span class='value'>" + counters[k] + "</span></div>";
+    function showAuthOverlay() {
+      document.getElementById('adminAuthOverlay').classList.add('show');
     }
-    const gauges = d.metrics.gauges || {};
-    for (const k of Object.keys(gauges).sort()) {
-      html += "<div class='metric'><span class='label'>" + k + "</span><span class='value'>" + gauges[k] + "</span></div>";
+
+    function hideAuthOverlay() {
+      document.getElementById('adminAuthOverlay').classList.remove('show');
     }
-    html += "</div>";
-  }
 
-  // API Keys card
-  if (d.api_keys && d.api_keys.length > 0) {
-    html += "<div class='card'><h2>API Keys</h2><table><tr><th>Name</th><th>Value</th><th>Expires</th></tr>";
-    for (const k of d.api_keys) {
-      const exp = k.expires_at ? new Date(k.expires_at * 1000).toLocaleDateString() : "never";
-      html += "<tr><td>" + (k.name || "—") + "</td><td><code>" + k.value + "</code></td><td>" + exp + "</td></tr>";
+    function submitAuthToken() {
+      const tokVal = document.getElementById('authAdminToken').value.trim();
+      if (!tokVal) {
+        showToast("Please provide a valid token", "error");
+        return;
+      }
+      adminToken = tokVal;
+      localStorage.setItem('adminToken', adminToken);
+      refresh();
     }
-    html += "</table></div>";
-  }
 
-  // Model Aliases card
-  if (d.model_aliases && Object.keys(d.model_aliases).length > 0) {
-    html += "<div class='card'><h2>Model Aliases";
-    if (editMode) {
-      html += "<button class='btn btn-sm btn-primary' onclick='openEditAliasesModal()'>Edit</button>";
+    function lockAdminConsole() {
+      adminToken = '';
+      localStorage.removeItem('adminToken');
+      showAuthOverlay();
     }
-    html += "</h2><div class='grid2'>";
-    for (const [k, v] of Object.entries(d.model_aliases)) {
-      html += "<div class='label'>" + k + "</div><div class='value'>" + v + "</div>";
+
+    // RENDER FUNCTIONS
+    function renderDashboard(d) {
+      // Refresh uptime
+      const days = Math.floor(d.uptime / (3600*24));
+      const hours = Math.floor((d.uptime % (3600*24)) / 3600);
+      const mins = Math.floor((d.uptime % 3600) / 60);
+      const secs = Math.round(d.uptime % 60);
+      let upStr = '';
+      if (days > 0) upStr += days + 'd ';
+      if (hours > 0) upStr += hours + 'h ';
+      if (mins > 0) upStr += mins + 'm ';
+      upStr += secs + 's';
+      document.getElementById('uptimeDisplay').textContent = "Uptime: " + upStr;
+
+      // Stats card counts
+      const poolSize = d.tokens ? d.tokens.length : 0;
+      const cooldownCount = d.tokens ? d.tokens.filter(t => t.on_cooldown).length : 0;
+      document.getElementById('statTokenCount').textContent = poolSize;
+      document.getElementById('statCooldownCount').textContent = cooldownCount + " on cooldown";
+
+      if (d.metrics && d.metrics.gauges) {
+        document.getElementById('statActiveRequests').textContent = d.metrics.gauges['qwen2api_active_requests'] || 0;
+      }
+      if (d.metrics && d.metrics.counters) {
+        document.getElementById('statTotalRequests').textContent = d.metrics.counters['qwen2api_http_requests_total'] || 0;
+      }
+
+      // Cache details
+      if (d.cache) {
+        const total = d.cache.hits + d.cache.misses;
+        const rate = total > 0 ? Math.round((d.cache.hits / total) * 100) : 0;
+        document.getElementById('statCacheHitRate').textContent = rate + "%";
+        document.getElementById('statCacheRatio').textContent = `${d.cache.hits} hits / ${d.cache.misses} misses`;
+        document.getElementById('overviewCacheSize').textContent = d.cache.size + " Entries";
+        
+        // Progress percentage (based on max capacity of 256 for progress display)
+        const capPct = Math.min(100, Math.round((d.cache.size / 256) * 100));
+        document.getElementById('overviewCacheProgress').style.width = capPct + "%";
+        document.getElementById('overviewCacheHits').textContent = d.cache.hits;
+        document.getElementById('overviewCacheMisses').textContent = d.cache.misses;
+      }
+
+      // Populate Overview Table
+      const overTableBody = document.querySelector('#overviewTokensTable tbody');
+      if (!d.tokens || d.tokens.length === 0) {
+        overTableBody.innerHTML = `<tr><td colspan="4" style="text-align: center; color: var(--text-muted);">No active tokens configured</td></tr>`;
+      } else {
+        let html = '';
+        d.tokens.slice(0, 5).forEach(t => {
+          const availClass = t.on_cooldown ? 'badge-danger' : 'badge-success';
+          const availText = t.on_cooldown ? 'Cooldown' : 'Available';
+          html += `
+            <tr>
+              <td style="font-weight: 500;">${t.name || '—'}</td>
+              <td><span class="badge ${availClass}">${availText}</span></td>
+              <td><span style="font-variant-numeric: tabular-nums;">${t.hits}</span></td>
+              <td style="color: var(--text-secondary);">${t.on_cooldown ? 'Cooldowned' : 'Ready'}</td>
+            </tr>
+          `;
+        });
+        overTableBody.innerHTML = html;
+      }
+
+      // Populate main Tokens tab
+      renderTokensTab();
+
+      // Populate Features tab
+      renderFeaturesTab();
+
+      // Populate Model Aliases tab
+      renderAliasesTab();
+
+      // Populate API Keys tab
+      renderApiKeysTab();
     }
-    html += "</div></div>";
-  }
 
-  root.innerHTML = html;
-}
+    // TOKENS POOL MANAGEMENT
+    function renderTokensTab() {
+      const tbody = document.getElementById('tokensTableBody');
+      const tokens = currentData.tokens || [];
+      if (tokens.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; color: var(--text-muted); padding: 32px;">No tokens are loaded in pool</td></tr>`;
+        return;
+      }
 
-function toggleEditMode() {
-  if (!editMode && !adminToken) {
-    adminToken = prompt("Enter admin token:");
-    if (!adminToken) return;
-    localStorage.setItem('adminToken', adminToken);
-  }
-  editMode = !editMode;
-  document.getElementById('editModeBtn').textContent = editMode ? 'View Mode' : 'Edit Mode';
-  render(currentData);
-}
+      let html = '';
+      tokens.forEach(t => {
+        const availClass = t.on_cooldown ? 'badge-danger' : 'badge-success';
+        const availText = t.on_cooldown ? 'Cooldown' : 'Active';
+        const valSnippet = t.value.length > 20 ? t.value.substring(0, 8) + "..." + t.value.substring(t.value.length - 8) : t.value;
+        html += `
+          <tr data-token-name="${t.name || ''}" data-token-value="${t.value}">
+            <td style="font-weight:600;">${t.name || '—'}</td>
+            <td><code style="font-family:var(--font-mono);font-size:12px;opacity:0.8;">${valSnippet}</code></td>
+            <td><span class="badge ${availClass}">${availText}</span></td>
+            <td style="font-variant-numeric: tabular-nums;">${t.hits}</td>
+            <td style="font-variant-numeric: tabular-nums; color: var(--color-danger);">${t.failures}</td>
+            <td style="text-align: right;">
+              <button class="btn btn-danger btn-sm" onclick="removeToken('${t.value}')">Delete</button>
+            </td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+      filterTokens();
+    }
 
-async function toggleFeature(key) {
-  if (!adminToken) return;
-  const features = {...currentData.features};
-  features[key] = !features[key];
+    function filterTokens() {
+      const query = document.getElementById('tokenSearchInput').value.toLowerCase().trim();
+      const rows = document.querySelectorAll('#tokensTableBody tr');
+      rows.forEach(row => {
+        if (!query) {
+          row.style.display = '';
+          return;
+        }
+        const name = row.getAttribute('data-token-name').toLowerCase();
+        const value = row.getAttribute('data-token-value').toLowerCase();
+        if (name.includes(query) || value.includes(query)) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
 
-  try {
-    const r = await fetch('/admin/config/features', {
-      method: 'PUT',
-      headers: {
-        'Authorization': 'Bearer ' + adminToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(features)
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    showToast('Feature updated', 'success');
+    async function saveToken() {
+      const val = document.getElementById('tokenValue').value.trim();
+      const name = document.getElementById('tokenName').value.trim();
+      if (!val) {
+        showToast("Token value is required", "error");
+        return;
+      }
+
+      try {
+        const r = await fetch('/admin/config/tokens', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ value: val, name: name })
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast("Upstream token added successfully", "success");
+        closeModal('addTokenModal');
+        document.getElementById('tokenValue').value = '';
+        document.getElementById('tokenName').value = '';
+        refresh();
+      } catch (e) {
+        showToast("Save token failed: " + e.message, "error");
+      }
+    }
+
+    async function removeToken(val) {
+      if (!confirm("Are you sure you want to delete this token from the active gateway pool?")) return;
+
+      try {
+        const r = await fetch('/admin/config/tokens', {
+          method: 'DELETE',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ value: val })
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast("Token deleted successfully", "success");
+        refresh();
+      } catch (e) {
+        showToast("Deletion failed: " + e.message, "error");
+      }
+    }
+
+    // FEATURE FLAG CONFIGURATION
+    function renderFeaturesTab() {
+      const container = document.getElementById('featuresContainer');
+      const features = currentData.features || {};
+      const sortedKeys = Object.keys(features).sort();
+      
+      let html = '';
+      sortedKeys.forEach(k => {
+        const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+        const isChecked = features[k] ? 'checked' : '';
+        html += `
+          <div class="switch-card">
+            <div class="switch-info">
+              <div class="switch-name">${label}</div>
+              <div class="switch-desc">${getFeatureDesc(k)}</div>
+            </div>
+            <label class="toggle-switch">
+              <input type="checkbox" ${isChecked} onchange="toggleFeatureItem('${k}', this.checked)">
+              <span class="slider"></span>
+            </label>
+          </div>
+        `;
+      });
+      container.innerHTML = html;
+    }
+
+    function getFeatureDesc(k) {
+      const descs = {
+        'prompt_caching': 'Fast track prompt cache handling for accelerated responses.',
+        'retry_on_token_failure': 'Auto backup switches to alternative tokens instantly on failure.',
+        'connection_pooling': 'Optimize network sockets resource re-use.',
+        'auto_token_refresh': 'Runs periodic health tests on active pool tokens.',
+        'metrics': 'Activate the Prometheus export API metrics layer.',
+        'request_logging': 'Detailed logging of inbound API calls to disk.',
+        'dashboard': 'Enable the graphical admin manager dashboard dashboard.',
+        'multi_format_tool_parsing': 'Broaden compatibility layers to complex tools schemas.',
+        'multimodal': 'Enable visual image input processing support.',
+        'embeddings': 'Allow structural embeddings endpoints.',
+        'conversation_continuity': 'Support stateful continuation across Qwen sessions.',
+        'api_key_rotation': 'Allows token key rotation and granular credentials.',
+        'session_affinity': 'Direct consecutive requests to matching active threads.',
+        'file_cache': 'Stores binary elements and configurations securely on disk.',
+        'topic_isolation': 'Runs dynamic topics inside separate partitions.'
+      };
+      return descs[k] || 'Configure and toggle behavior in real time.';
+    }
+
+    async function toggleFeatureItem(key, checked) {
+      const updated = { ...currentData.features };
+      updated[key] = checked;
+
+      try {
+        const r = await fetch('/admin/config/features', {
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updated)
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast(`Feature ${key} updated`, "success");
+        refresh();
+      } catch (e) {
+        showToast("Failed to switch toggle: " + e.message, "error");
+        refresh(); // revert checkbox
+      }
+    }
+
+    // MODEL ALIASES EDITABLE GRID
+    function renderAliasesTab() {
+      const tbody = document.getElementById('aliasesTableBody');
+      const aliases = currentData.model_aliases || {};
+      const sortedKeys = Object.keys(aliases).sort();
+
+      if (sortedKeys.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 32px;">No model aliases registered. Click 'Add Custom Alias'</td></tr>`;
+        return;
+      }
+
+      let html = '';
+      sortedKeys.forEach(k => {
+        html += `
+          <tr data-alias-key="${k}" data-alias-val="${aliases[k]}">
+            <td><code style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--accent-color);">${k}</code></td>
+            <td>
+              <input type="text" class="alias-input-inline" id="aliasInputVal-${k}" value="${aliases[k]}" style="width: 80%; display: inline-block;">
+              <button class="btn btn-secondary btn-sm" onclick="updateAliasInline('${k}')">Save</button>
+            </td>
+            <td style="text-align: right;">
+              <button class="btn btn-danger btn-sm" onclick="removeAliasItem('${k}')">Remove</button>
+            </td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function filterAliases() {
+      const query = document.getElementById('aliasSearchInput').value.toLowerCase().trim();
+      const rows = document.querySelectorAll('#aliasesTableBody tr');
+      rows.forEach(row => {
+        if (!query) {
+          row.style.display = '';
+          return;
+        }
+        const k = row.getAttribute('data-alias-key').toLowerCase();
+        const v = row.getAttribute('data-alias-val').toLowerCase();
+        if (k.includes(query) || v.includes(query)) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+
+    function openAddAliasModal() {
+      openModal('addAliasModal');
+    }
+
+    async function saveAliasItem() {
+      const key = document.getElementById('aliasKey').value.trim();
+      const val = document.getElementById('aliasValue').value.trim();
+      if (!key || !val) {
+        showToast("Both Requested and Target models are required", "error");
+        return;
+      }
+
+      const updated = { ...currentData.model_aliases };
+      updated[key] = val;
+
+      try {
+        const r = await fetch('/admin/config/aliases', {
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updated)
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast("Model alias created", "success");
+        closeModal('addAliasModal');
+        document.getElementById('aliasKey').value = '';
+        document.getElementById('aliasValue').value = '';
+        refresh();
+      } catch (e) {
+        showToast("Save failed: " + e.message, "error");
+      }
+    }
+
+    async function updateAliasInline(key) {
+      const newVal = document.getElementById(`aliasInputVal-${key}`).value.trim();
+      if (!newVal) {
+        showToast("Target model cannot be empty", "error");
+        return;
+      }
+
+      const updated = { ...currentData.model_aliases };
+      updated[key] = newVal;
+
+      try {
+        const r = await fetch('/admin/config/aliases', {
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updated)
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast(`Alias ${key} updated successfully`, "success");
+        refresh();
+      } catch (e) {
+        showToast("Save failed: " + e.message, "error");
+      }
+    }
+
+    async function removeAliasItem(key) {
+      if (!confirm(`Delete compatibility alias for ${key}?`)) return;
+
+      const updated = { ...currentData.model_aliases };
+      delete updated[key];
+
+      try {
+        const r = await fetch('/admin/config/aliases', {
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updated)
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast(`Alias ${key} deleted`, "success");
+        refresh();
+      } catch (e) {
+        showToast("Deletion failed: " + e.message, "error");
+      }
+    }
+
+    // API KEYS MANAGER
+    function renderApiKeysTab() {
+      const tbody = document.getElementById('apiKeysTableBody');
+      const keys = currentData.api_keys || [];
+
+      if (keys.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="3" style="text-align: center; color: var(--text-muted); padding: 32px;">No active client API keys configured. Running open gateway mode</td></tr>`;
+        return;
+      }
+
+      let html = '';
+      keys.forEach(k => {
+        const exp = k.expires_at ? new Date(k.expires_at * 1000).toLocaleDateString() : "never";
+        html += `
+          <tr>
+            <td style="font-weight:600;">${k.name || '—'}</td>
+            <td><code style="font-family:var(--font-mono);font-size:12px;">${k.value}</code></td>
+            <td style="text-align: right;">
+              <button class="btn btn-danger btn-sm" onclick="deleteApiKeyItem('${k.value}')">Revoke</button>
+            </td>
+          </tr>
+        `;
+      });
+      tbody.innerHTML = html;
+    }
+
+    function generateRandomKeyStr() {
+      const chars = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+      let result = 'sk-qwen-';
+      const arr = new Uint8Array(24);
+      window.crypto.getRandomValues(arr);
+      for (let i = 0; i < arr.length; i++) {
+        result += chars[arr[i] % chars.length];
+      }
+      document.getElementById('newKeyVal').value = result;
+    }
+
+    async function saveNewApiKey() {
+      const value = document.getElementById('newKeyVal').value.trim();
+      const name = document.getElementById('newKeyName').value.trim();
+      const days = parseInt(document.getElementById('newKeyExpiry').value);
+      
+      if (!value) {
+        showToast("Please generate or enter a key value first", "error");
+        return;
+      }
+
+      const bodyObj = { value, name };
+      if (days > 0) {
+        bodyObj.expires_at = Math.floor(Date.now() / 1000) + (days * 24 * 3600);
+      }
+
+      try {
+        const r = await fetch('/admin/keys', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(bodyObj)
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast("API Key created and authorized", "success");
+        document.getElementById('newKeyVal').value = '';
+        document.getElementById('newKeyName').value = '';
+        document.getElementById('newKeyExpiry').value = '0';
+        refresh();
+      } catch (e) {
+        showToast("Authorization failed: " + e.message, "error");
+      }
+    }
+
+    async function deleteApiKeyItem(val) {
+      if (!confirm(`Are you sure you want to revoke key ${val}?`)) return;
+
+      try {
+        const r = await fetch(`/admin/keys/${encodeURIComponent(val)}`, {
+          method: 'DELETE',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken
+          }
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast("API key successfully revoked", "success");
+        refresh();
+      } catch (e) {
+        showToast("Revoke key failed: " + e.message, "error");
+      }
+    }
+
+    // MODAL WRAPPERS
+    function openModal(id) {
+      document.getElementById(id).classList.add('show');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.remove('show');
+    }
+
+    // TOAST NOTIFICATIONS
+    function showToast(message, type = "success") {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+      toast.innerHTML = `
+        <span style="font-weight: 600;">${type.toUpperCase()}:</span>
+        <span>${message}</span>
+      `;
+      container.appendChild(toast);
+      
+      setTimeout(() => {
+        toast.style.animation = 'toastSlideIn 0.3s reverse forwards';
+        setTimeout(() => toast.remove(), 300);
+      }, 3500);
+    }
+
+    // AUTO LOOP REFRESH
     refresh();
-  } catch (e) {
-    showToast('Failed to update: ' + e.message, 'error');
-  }
-}
-
-function openAddTokenModal() {
-  document.getElementById('addTokenModal').classList.add('show');
-}
-
-function closeModal(id) {
-  document.getElementById(id).classList.remove('show');
-}
-
-async function saveToken() {
-  const value = document.getElementById('tokenValue').value;
-  const name = document.getElementById('tokenName').value;
-
-  if (!value) {
-    showToast('Token value is required', 'error');
-    return;
-  }
-
-  try {
-    const r = await fetch('/admin/config/tokens', {
-      method: 'POST',
-      headers: {
-        'Authorization': 'Bearer ' + adminToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ value, name })
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    showToast('Token added', 'success');
-    closeModal('addTokenModal');
-    document.getElementById('tokenValue').value = '';
-    document.getElementById('tokenName').value = '';
-    refresh();
-  } catch (e) {
-    showToast('Failed to add token: ' + e.message, 'error');
-  }
-}
-
-async function removeToken(value) {
-  if (!confirm('Remove this token?')) return;
-
-  try {
-    const r = await fetch('/admin/config/tokens', {
-      method: 'DELETE',
-      headers: {
-        'Authorization': 'Bearer ' + adminToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify({ value })
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    showToast('Token removed', 'success');
-    refresh();
-  } catch (e) {
-    showToast('Failed to remove token: ' + e.message, 'error');
-  }
-}
-
-function openEditAliasesModal() {
-  document.getElementById('aliasesJson').value = JSON.stringify(currentData.model_aliases || {}, null, 2);
-  document.getElementById('editAliasesModal').classList.add('show');
-}
-
-async function saveAliases() {
-  const json = document.getElementById('aliasesJson').value;
-
-  try {
-    const aliases = JSON.parse(json);
-    const r = await fetch('/admin/config/aliases', {
-      method: 'PUT',
-      headers: {
-        'Authorization': 'Bearer ' + adminToken,
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(aliases)
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    showToast('Aliases updated', 'success');
-    closeModal('editAliasesModal');
-    refresh();
-  } catch (e) {
-    showToast('Failed to save aliases: ' + e.message, 'error');
-  }
-}
-
-function showToast(message, type) {
-  const toast = document.getElementById('toast');
-  toast.textContent = message;
-  toast.className = 'toast show ' + type;
-  setTimeout(() => toast.classList.remove('show'), 3000);
-}
-
-// Auto-refresh every 5 seconds
-refresh();
-setInterval(refresh, 5000);
-</script>
+    setInterval(refresh, 5000);
+  </script>
 </body>
 </html>
