@@ -10,6 +10,10 @@ import (
 // staticModels is the fallback model list used when the upstream /api/models
 // call is unavailable (e.g. no token configured yet).
 var staticModels = []string{
+	"qwen3.7-max",
+	"qwen3.7-plus",
+	"qwen3.6-plus",
+	"qwen3.6-max-preview",
 	"qwen3-max",
 	"qwen3-max-latest",
 	"qwen-max",

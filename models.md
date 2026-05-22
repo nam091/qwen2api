@@ -1,6 +1,13 @@
-# Qwen Available Models (2026-05-18)
+# Qwen Available Models (2026-05-22)
 
-## Qwen 3.6 (Latest)
+## Qwen 3.7 (Latest Flagship)
+
+| Model ID | Name | Modality | Context | Thinking | Search |
+|----------|------|----------|---------|----------|--------|
+| qwen3.7-max | Qwen3.7-Max | text | 1,000,000 | yes | yes |
+| qwen3.7-plus | Qwen3.7-Plus | text, image, video, audio | 1,000,000 | yes (auto) | yes |
+
+## Qwen 3.6
 
 | Model ID | Name | Modality | Context | Thinking | Search |
 |----------|------|----------|---------|----------|--------|
