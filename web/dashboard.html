@@ -606,6 +606,10 @@
     0% { transform: translateX(-120%) skewX(-20deg); }
     100% { transform: translateX(220%) skewX(-20deg); }
   }
+  @keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+  }
 
   /* DECORATIVE MINI CHART */
   .mini-spark {
@@ -1118,6 +1122,12 @@
             <div>
               <h2>Available Models & Sandbox</h2>
               <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Dynamic verification and integration of all upstream Qwen models & aliases.</p>
+            </div>
+            <div>
+              <button class="btn btn-primary" id="btn-test-all-models" onclick="testAllModelsSequentially()">
+                <svg style="width:16px;height:16px;fill:currentColor;margin-right:6px;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                Test Live One-by-One
+              </button>
             </div>
           </div>
           
@@ -2250,6 +2260,43 @@
         showToast(`Test failed: ${e.message}`, "error");
       } finally {
         if (btn) btn.disabled = false;
+      }
+    }
+
+    async function testAllModelsSequentially() {
+      const btn = document.getElementById('btn-test-all-models');
+      if (!btn) return;
+      
+      const standardIds = STANDARD_MODELS.map(m => m.id);
+      const aliasIds = Object.keys((currentData && currentData.model_aliases) || {});
+      const allModelIds = [...standardIds, ...aliasIds];
+      
+      if (allModelIds.length === 0) {
+        showToast("No models or aliases available to test", "warning");
+        return;
+      }
+      
+      btn.disabled = true;
+      const originalText = btn.innerHTML;
+      
+      try {
+        for (let i = 0; i < allModelIds.length; i++) {
+          const modelId = allModelIds[i];
+          btn.innerHTML = `
+            <svg style="width:16px;height:16px;fill:currentColor;margin-right:6px;animation:spin 1s linear infinite;" viewBox="0 0 24 24">
+              <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.41 3.59-8 8-8zm0 14c4.41 0 8-3.59 8-8h2c0 5.52-4.48 10-10 10v-2z"/>
+            </svg>
+            Testing (${i + 1}/${allModelIds.length})
+          `;
+          
+          await testModelConnectivity(modelId);
+        }
+        showToast("All model connectivity tests finished!", "success");
+      } catch (err) {
+        showToast("Error during sequential testing: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
       }
     }
 

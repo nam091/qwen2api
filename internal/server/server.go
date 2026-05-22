@@ -61,6 +61,7 @@ func New(deps Deps) http.Handler {
 		r.Get("/metrics", h.prometheusMetrics)
 	}
 	r.Get("/dashboard", h.dashboard)
+	r.Get("/dashboard/data", h.dashboardData)
 
 	// OpenAI-compatible surface, accessible both at /v1/* and at the root for
 	// clients that strip the version prefix.
@@ -78,7 +79,6 @@ func New(deps Deps) http.Handler {
 
 	r.Group(func(r chi.Router) {
 		r.Use(h.adminMiddleware)
-		r.Get("/dashboard/data", h.dashboardData)
 		r.Get("/admin/keys", h.listAPIKeys)
 		r.Post("/admin/keys", h.createAPIKey)
 		r.Delete("/admin/keys/{value}", h.deleteAPIKey)
