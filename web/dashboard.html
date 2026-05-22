@@ -3610,6 +3610,27 @@
 
       const cloudSvg = `<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; margin-right: 4px;">cloud_upload</span>`;
 
+      if (tunnelState.enabled === false) {
+        if (badge) {
+          badge.textContent = 'Disabled';
+          badge.style.background = 'rgba(255, 255, 255, 0.05)';
+          badge.style.color = 'var(--text-muted)';
+        }
+        if (btn) {
+          btn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px; vertical-align: middle;">block</span>Disabled';
+          btn.disabled = true;
+        }
+        if (epBtn) {
+          epBtn.style.background = 'rgba(255, 255, 255, 0.05)';
+          epBtn.style.color = 'var(--text-muted)';
+          epBtn.disabled = true;
+          epBtn.innerHTML = cloudSvg + '<span id="endpointTunnelBtnText" style="vertical-align: middle;">Disabled</span>';
+        }
+        if (urlDisplay) urlDisplay.style.display = 'none';
+        if (epUrlWrapper) epUrlWrapper.style.display = 'none';
+        return;
+      }
+
       if (tunnelState.running) {
         if (badge) {
           badge.textContent = 'Active';
@@ -3626,6 +3647,7 @@
         }
         if (epBtn) {
           epBtn.style.background = 'var(--color-success)';
+          epBtn.style.color = 'white';
           epBtn.disabled = false;
           epBtn.innerHTML = cloudSvg + '<span id="endpointTunnelBtnText" style="vertical-align: middle;">Disable</span>';
         }
@@ -3648,6 +3670,7 @@
         }
         if (epBtn) {
           epBtn.style.background = '#E56A4A';
+          epBtn.style.color = 'white';
           epBtn.disabled = false;
           epBtn.innerHTML = cloudSvg + '<span id="endpointTunnelBtnText" style="vertical-align: middle;">Enable</span>';
         }
