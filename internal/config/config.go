@@ -298,19 +298,6 @@ func (c Config) ResolveModel(model string) string {
 	if alias, ok := c.ModelAliases[model]; ok && alias != "" {
 		return alias
 	}
-	// Default fallbacks for common Claude models to Qwen models if not explicitly set
-	if strings.Contains(model, "claude-3-7-sonnet") || strings.Contains(model, "claude-3.7-sonnet") {
-		return "qwen3.6-plus"
-	}
-	if strings.Contains(model, "claude-3-5-sonnet") || strings.Contains(model, "claude-3.5-sonnet") {
-		return "qwen3.5-plus"
-	}
-	if strings.Contains(model, "claude-3-opus") {
-		return "qwen3.6-max-preview"
-	}
-	if strings.Contains(model, "claude-3-haiku") {
-		return "qwen3.5-flash"
-	}
 	return model
 }
 
