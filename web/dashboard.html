@@ -1969,12 +1969,20 @@
       localStorage.setItem('adminToken', adminToken);
       hideAuthOverlay();
       refresh();
+      if (!window.refreshInterval) {
+        window.refreshInterval = setInterval(refresh, 5000);
+      }
+      updateTailscaleUI();
     }
 
     function lockAdminConsole() {
       disconnectLogStream();
       adminToken = '';
       localStorage.removeItem('adminToken');
+      if (window.refreshInterval) {
+        clearInterval(window.refreshInterval);
+        window.refreshInterval = null;
+      }
       showAuthOverlay();
     }
 
@@ -2778,6 +2786,11 @@
     let autoscrollLogs = true;
 
     function connectLogStream() {
+      if (!adminToken) {
+        showToast("Admin authorization required to stream logs", "error");
+        showAuthOverlay();
+        return;
+      }
       if (logSource) return;
       
       const statusEl = document.getElementById('logConnectionStatus');
@@ -3207,9 +3220,15 @@
     }
 
     // AUTO LOOP REFRESH
-    refresh();
-    updateTailscaleUI();
-    setInterval(refresh, 5000);
+    let savedToken = localStorage.getItem('adminToken');
+    if (!savedToken) {
+      showAuthOverlay();
+    } else {
+      adminToken = savedToken;
+      refresh();
+      window.refreshInterval = setInterval(refresh, 5000);
+      updateTailscaleUI();
+    }
 
     // Tunnel Management Functions
     let tunnelState = { running: false, url: '', port: 0 };

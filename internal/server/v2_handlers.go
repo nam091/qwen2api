@@ -44,6 +44,12 @@ func (s *statusRecorder) WriteHeader(code int) {
 	s.ResponseWriter.WriteHeader(code)
 }
 
+func (s *statusRecorder) Flush() {
+	if f, ok := s.ResponseWriter.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
 // prometheusMetrics renders metrics in text exposition format.
 func (h *handlers) prometheusMetrics(w http.ResponseWriter, _ *http.Request) {
 	if !h.deps.Config.Features.Metrics {
