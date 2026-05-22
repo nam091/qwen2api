@@ -121,6 +121,7 @@ func Default() Config {
 			ConversationContinuity: false,
 			APIKeyRotation:         false,
 			BrowserEngineFallback:  false,
+			Tunnel:                 true,
 		},
 		Cache: CacheConfig{
 			MaxEntries: 256,
