@@ -101,9 +101,9 @@
     font-family: var(--font-sans);
     background: var(--bg-main);
     color: var(--text-primary);
-    min-height: 100vh;
+    height: 100vh;
     display: flex;
-    overflow-x: hidden;
+    overflow: hidden;
     position: relative;
     transition: var(--transition-smooth);
   }
@@ -123,6 +123,7 @@
   /* SIDEBAR */
   aside {
     width: 280px;
+    height: 100vh;
     background: var(--bg-sidebar);
     border-right: 1px solid var(--border-color);
     display: flex;
@@ -133,6 +134,7 @@
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
     z-index: 50;
+    overflow-y: auto;
   }
 
   /* macOS Traffic Lights */
@@ -251,11 +253,13 @@
   /* MAIN CONTENT AREA */
   main {
     flex-grow: 1;
+    height: 100vh;
     display: flex;
     flex-direction: column;
     min-width: 0;
     transition: var(--transition-smooth);
     z-index: 1;
+    overflow: hidden;
   }
 
   header {

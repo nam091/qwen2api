@@ -41,6 +41,7 @@ type FeatureToggles struct {
 	SessionAffinity        bool `json:"session_affinity"`
 	FileCache              bool `json:"file_cache"`
 	TopicIsolation         bool `json:"topic_isolation"`
+	Tunnel                 bool `json:"tunnel"`
 }
 
 // CacheConfig configures the prompt cache.

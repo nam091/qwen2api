@@ -34,6 +34,11 @@ type Deps struct {
 	Affinity      *affinity.Store
 	FileCache     *filecache.Cache
 	TokenCounter  *tokencount.Counter
+	TunnelManager interface {
+		Start(port int) (string, error)
+		Stop() error
+		Status() (running bool, url string, port int)
+	}
 }
 
 // New returns the configured http.Handler.
@@ -89,6 +94,9 @@ func New(deps Deps) http.Handler {
 		r.Put("/admin/config/aliases", h.updateModelAliases)
 		r.Get("/admin/logs/stream", h.streamLogs)
 		r.Post("/admin/models/test", h.testModel)
+		r.Get("/admin/tunnel/status", h.getTunnelStatus)
+		r.Post("/admin/tunnel/start", h.startTunnel)
+		r.Post("/admin/tunnel/stop", h.stopTunnel)
 	})
 
 	return r

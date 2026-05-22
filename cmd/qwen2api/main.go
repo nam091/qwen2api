@@ -22,6 +22,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/server"
 	"github.com/keaume34/qwen2api/internal/tokencount"
 	"github.com/keaume34/qwen2api/internal/tokenpool"
+	"github.com/keaume34/qwen2api/internal/tunnel"
 )
 
 func main() {
@@ -92,17 +93,23 @@ func run() error {
 	var tokenCounter *tokencount.Counter
 	tokenCounter = tokencount.New(4.0)
 
+	var tunnelMgr *tunnel.Manager
+	if cfg.Features.Tunnel {
+		tunnelMgr = tunnel.New(logger)
+	}
+
 	srv := server.New(server.Deps{
-		Config:       cfg,
-		Logger:       logger,
-		Qwen:         client,
-		TokenPool:    pool,
-		Cache:        cache,
-		Metrics:      metricsReg,
-		ReqLog:       reqLogger,
-		Affinity:     affinityStore,
-		FileCache:    fileCache,
-		TokenCounter: tokenCounter,
+		Config:        cfg,
+		Logger:        logger,
+		Qwen:          client,
+		TokenPool:     pool,
+		Cache:         cache,
+		Metrics:       metricsReg,
+		ReqLog:        reqLogger,
+		Affinity:      affinityStore,
+		FileCache:     fileCache,
+		TokenCounter:  tokenCounter,
+		TunnelManager: tunnelMgr,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
@@ -140,6 +147,9 @@ func run() error {
 	}
 	if reqLogger != nil {
 		_ = reqLogger.Close()
+	}
+	if tunnelMgr != nil {
+		_ = tunnelMgr.Stop()
 	}
 	return nil
 }
