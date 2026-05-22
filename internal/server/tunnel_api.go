@@ -25,9 +25,8 @@ func (h *handlers) getTunnelStatus(w http.ResponseWriter, _ *http.Request) {
 	})
 }
 
-// startTunnel starts the cloudflared tunnel.
 func (h *handlers) startTunnel(w http.ResponseWriter, r *http.Request) {
-	if h.deps.TunnelManager == nil {
+	if h.deps.TunnelManager == nil || !h.deps.Config.Features.Tunnel {
 		writeError(w, http.StatusServiceUnavailable, "tunnel_unavailable", "Tunnel manager not initialized. Restart server with tunnel feature enabled in config.")
 		return
 	}
@@ -60,7 +59,7 @@ func (h *handlers) startTunnel(w http.ResponseWriter, r *http.Request) {
 
 // stopTunnel stops the cloudflared tunnel.
 func (h *handlers) stopTunnel(w http.ResponseWriter, _ *http.Request) {
-	if h.deps.TunnelManager == nil {
+	if h.deps.TunnelManager == nil || !h.deps.Config.Features.Tunnel {
 		writeError(w, http.StatusServiceUnavailable, "tunnel_unavailable", "Tunnel manager not initialized. Restart server with tunnel feature enabled in config.")
 		return
 	}

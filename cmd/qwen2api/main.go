@@ -96,7 +96,11 @@ func run() error {
 	var tokenCounter *tokencount.Counter
 	tokenCounter = tokencount.New(4.0)
 
-	var tunnelMgr *tunnel.Manager
+	var tunnelMgr interface {
+		Start(port int) (string, error)
+		Stop() error
+		Status() (running bool, url string, port int)
+	}
 	if cfg.Features.Tunnel {
 		tunnelMgr = tunnel.New(logger)
 	}
