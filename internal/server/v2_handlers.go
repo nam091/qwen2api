@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"sort"
@@ -199,6 +200,56 @@ func (h *handlers) dashboardData(w http.ResponseWriter, _ *http.Request) {
 
 	writeJSON(w, http.StatusOK, out)
 }
+
+// streamLogs provides real-time HTTP server-sent events for request logs.
+func (h *handlers) streamLogs(w http.ResponseWriter, r *http.Request) {
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	logChan := h.deps.ReqLog.Subscribe()
+	if logChan == nil {
+		http.Error(w, "Logger not configured", http.StatusInternalServerError)
+		return
+	}
+	defer h.deps.ReqLog.Unsubscribe(logChan)
+
+	// Keep alive ticker to prevent connection close due to inactivity
+	ticker := time.NewTicker(15 * time.Second)
+	defer ticker.Stop()
+
+	// Initial message to verify connection
+	_, _ = fmt.Fprintf(w, "event: connected\ndata: {\"status\":\"connected\"}\n\n")
+	flusher.Flush()
+
+	for {
+		select {
+		case <-r.Context().Done():
+			return
+		case <-ticker.C:
+			_, _ = fmt.Fprintf(w, "event: ping\ndata: {}\n\n")
+			flusher.Flush()
+		case entry, ok := <-logChan:
+			if !ok {
+				return
+			}
+			data, err := json.Marshal(entry)
+			if err != nil {
+				continue
+			}
+			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+			flusher.Flush()
+		}
+	}
+}
+
 
 // startedAt is initialized when the server starts.
 var startedAt = time.Now()

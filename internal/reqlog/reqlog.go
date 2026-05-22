@@ -34,6 +34,9 @@ type Logger struct {
 	maxSize     int64
 	maxBackups  int
 	truncateLen int
+
+	subMu       sync.RWMutex
+	subscribers map[chan Entry]bool
 }
 
 // NewLogger opens or creates the log file at path.
@@ -63,6 +66,7 @@ func NewLogger(path string, maxSizeMB, maxBackups, truncateLen int) (*Logger, er
 		maxSize:     int64(maxSizeMB) * 1024 * 1024,
 		maxBackups:  maxBackups,
 		truncateLen: truncateLen,
+		subscribers: make(map[chan Entry]bool),
 	}, nil
 }
 
@@ -75,12 +79,13 @@ func (l *Logger) Log(e Entry) {
 		e.Time = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	l.mu.Lock()
-	defer l.mu.Unlock()
 	if err := l.rotateIfNeeded(); err != nil {
+		l.mu.Unlock()
 		return
 	}
 	raw, err := json.Marshal(e)
 	if err != nil {
+		l.mu.Unlock()
 		return
 	}
 	if l.truncateLen > 0 && len(raw) > l.truncateLen {
@@ -88,6 +93,50 @@ func (l *Logger) Log(e Entry) {
 	}
 	_, _ = l.file.Write(raw)
 	_, _ = l.file.WriteString("\n")
+	l.mu.Unlock()
+
+	go l.Broadcast(e)
+}
+
+// Subscribe registers a new subscriber channel.
+func (l *Logger) Subscribe() chan Entry {
+	if l == nil {
+		return nil
+	}
+	l.subMu.Lock()
+	defer l.subMu.Unlock()
+	ch := make(chan Entry, 128)
+	l.subscribers[ch] = true
+	return ch
+}
+
+// Unsubscribe safely deletes and drains the channel.
+func (l *Logger) Unsubscribe(ch chan Entry) {
+	if l == nil {
+		return
+	}
+	l.subMu.Lock()
+	defer l.subMu.Unlock()
+	if _, exists := l.subscribers[ch]; exists {
+		delete(l.subscribers, ch)
+		close(ch)
+	}
+}
+
+// Broadcast dispatches the entry to all subscribers.
+func (l *Logger) Broadcast(e Entry) {
+	if l == nil {
+		return
+	}
+	l.subMu.RLock()
+	defer l.subMu.RUnlock()
+	for ch := range l.subscribers {
+		select {
+		case ch <- e:
+		default:
+			// Slow reader, drop to avoid blocking
+		}
+	}
 }
 
 // Close flushes and closes the underlying file.

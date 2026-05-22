@@ -93,6 +93,7 @@ func New(deps Deps) http.Handler {
 		r.Post("/admin/config/tokens", h.addToken)
 		r.Delete("/admin/config/tokens", h.removeToken)
 		r.Put("/admin/config/aliases", h.updateModelAliases)
+		r.Get("/admin/logs/stream", h.streamLogs)
 	})
 
 	return r
