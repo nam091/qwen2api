@@ -1141,7 +1141,6 @@
               <thead>
                 <tr>
                   <th>Model ID</th>
-                  <th>Model Name</th>
                   <th>Modality</th>
                   <th>Context Limit</th>
                   <th>Capabilities</th>
@@ -2180,7 +2179,6 @@
         html += `
           <tr data-model-search="${m.id} ${m.name} ${m.modality}">
             <td style="font-weight:600;"><code style="font-family:var(--font-mono);color:var(--accent-color);">${m.id}</code></td>
-            <td>${m.name}</td>
             <td><span style="font-size:12px;opacity:0.85;">${m.modality}</span></td>
             <td style="font-variant-numeric: tabular-nums;">${parseInt(m.context).toLocaleString()}</td>
             <td>${capStr}</td>
@@ -2201,10 +2199,11 @@
           <tr data-model-search="${aliasKey} ${targetModel} custom alias">
             <td style="font-weight:600;"><code style="font-family:var(--font-mono);color:#10b981;">${aliasKey}</code></td>
             <td>
-              <span class="badge badge-success" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.2); font-size:10px; margin-right:6px;">Alias</span>
-              Maps to upstream
+              <div style="display:flex; align-items:center; gap:8px;">
+                <span class="badge badge-success" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.2); font-size:10px;">Alias</span>
+                <code style="font-family:var(--font-mono);font-size:12px;opacity:0.8;">${targetModel}</code>
+              </div>
             </td>
-            <td><code style="font-family:var(--font-mono);font-size:12px;opacity:0.8;">${targetModel}</code></td>
             <td>—</td>
             <td><span class="badge badge-success" style="background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); font-size:10px;">Custom Route</span></td>
             <td id="status-model-${aliasKey.replace(/\./g, '-')}" style="font-variant-numeric: tabular-nums;">
