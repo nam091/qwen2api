@@ -44,6 +44,9 @@ func (h *handlers) authMiddleware(next http.Handler) http.Handler {
 }
 
 func bearerOrQuery(r *http.Request) string {
+	if q := r.URL.Query().Get("api_key"); q != "" {
+		return strings.TrimSpace(q)
+	}
 	if h := r.Header.Get("Authorization"); h != "" {
 		if strings.HasPrefix(h, "Bearer ") {
 			return strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
@@ -53,7 +56,7 @@ func bearerOrQuery(r *http.Request) string {
 	if k := r.Header.Get("X-Api-Key"); k != "" {
 		return strings.TrimSpace(k)
 	}
-	return strings.TrimSpace(r.URL.Query().Get("api_key"))
+	return ""
 }
 
 func writeJSON(w http.ResponseWriter, status int, body any) {

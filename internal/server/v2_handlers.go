@@ -46,6 +46,10 @@ func (s *statusRecorder) WriteHeader(code int) {
 
 // prometheusMetrics renders metrics in text exposition format.
 func (h *handlers) prometheusMetrics(w http.ResponseWriter, _ *http.Request) {
+	if !h.deps.Config.Features.Metrics {
+		http.Error(w, "Metrics feature is disabled", http.StatusNotFound)
+		return
+	}
 	w.Header().Set("Content-Type", "text/plain; version=0.0.4; charset=utf-8")
 	_, _ = w.Write([]byte(h.deps.Metrics.Render()))
 }
@@ -64,6 +68,10 @@ func (h *handlers) adminMiddleware(next http.Handler) http.Handler {
 
 // listAPIKeys returns the configured API keys (values masked).
 func (h *handlers) listAPIKeys(w http.ResponseWriter, _ *http.Request) {
+	if !h.deps.Config.Features.APIKeyRotation {
+		writeError(w, http.StatusForbidden, "feature_disabled", "API Key Rotation feature is disabled")
+		return
+	}
 	type maskedKey struct {
 		Name      string `json:"name,omitempty"`
 		Value     string `json:"value"`
@@ -86,6 +94,10 @@ func (h *handlers) listAPIKeys(w http.ResponseWriter, _ *http.Request) {
 
 // createAPIKey appends a new key (in-memory only; not persisted).
 func (h *handlers) createAPIKey(w http.ResponseWriter, r *http.Request) {
+	if !h.deps.Config.Features.APIKeyRotation {
+		writeError(w, http.StatusForbidden, "feature_disabled", "API Key Rotation feature is disabled")
+		return
+	}
 	var body config.APIKey
 	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "invalid JSON: "+err.Error())
@@ -101,6 +113,10 @@ func (h *handlers) createAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // deleteAPIKey removes a key by exact value match (admin must know the value).
 func (h *handlers) deleteAPIKey(w http.ResponseWriter, r *http.Request) {
+	if !h.deps.Config.Features.APIKeyRotation {
+		writeError(w, http.StatusForbidden, "feature_disabled", "API Key Rotation feature is disabled")
+		return
+	}
 	value := chi.URLParam(r, "value")
 	if value == "" {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "value is required")
@@ -125,6 +141,10 @@ func (h *handlers) deleteAPIKey(w http.ResponseWriter, r *http.Request) {
 
 // embeddings is a placeholder OpenAI-compatible endpoint.
 func (h *handlers) embeddings(w http.ResponseWriter, r *http.Request) {
+	if !h.deps.Config.Features.Embeddings {
+		writeError(w, http.StatusForbidden, "feature_disabled", "Embeddings feature is disabled")
+		return
+	}
 	defer func() { _ = r.Body.Close() }()
 	var req struct {
 		Model string `json:"model"`
@@ -146,6 +166,10 @@ func (h *handlers) embeddings(w http.ResponseWriter, r *http.Request) {
 
 // dashboard renders a single-page HTML view.
 func (h *handlers) dashboard(w http.ResponseWriter, _ *http.Request) {
+	if !h.deps.Config.Features.Dashboard {
+		http.Error(w, "Dashboard feature is disabled", http.StatusNotFound)
+		return
+	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	// Try to serve from web/dashboard.html first
 	content, err := os.ReadFile("web/dashboard.html")
@@ -159,6 +183,10 @@ func (h *handlers) dashboard(w http.ResponseWriter, _ *http.Request) {
 
 // dashboardData returns a JSON snapshot consumed by the dashboard page.
 func (h *handlers) dashboardData(w http.ResponseWriter, _ *http.Request) {
+	if !h.deps.Config.Features.Dashboard {
+		http.Error(w, "Dashboard feature is disabled", http.StatusNotFound)
+		return
+	}
 	out := map[string]any{
 		"version":  "v2",
 		"uptime":   time.Since(startedAt).Seconds(),
@@ -213,6 +241,7 @@ func (h *handlers) streamLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
+	w.Header().Set("X-Accel-Buffering", "no")
 
 	logChan := h.deps.ReqLog.Subscribe()
 	if logChan == nil {
@@ -371,3 +400,31 @@ setInterval(refresh, 5000);
 
 // Ensure strings is imported (used in dashboardHTML escaping if added later).
 var _ = strings.Builder{}
+
+func (h *handlers) testModel(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Model string `json:"model"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "die", "error": "invalid json: " + err.Error()})
+		return
+	}
+	if body.Model == "" {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "die", "error": "model is required"})
+		return
+	}
+	token, err := h.deps.TokenPool.Take()
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "die", "error": "no upstream tokens available: " + err.Error()})
+		return
+	}
+	start := time.Now()
+	// NewChat creates a lightweight chat conversation. Perfect for latency and live/die check.
+	chatId, err := h.deps.Qwen.NewChat(r.Context(), token.Value, body.Model, "normal")
+	latency := time.Since(start).Milliseconds()
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{"status": "die", "error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"status": "live", "latency_ms": latency, "chat_id": chatId})
+}

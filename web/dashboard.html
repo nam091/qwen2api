@@ -609,6 +609,129 @@
     height: 40px;
     margin-top: 10px;
   }
+
+  /* HIGH-FIDELITY THEME CARDS */
+  .theme-card {
+    position: relative;
+    border: 2px solid var(--border-color);
+    border-radius: 16px;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 20px;
+    cursor: pointer;
+    transition: var(--transition-smooth);
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    height: 230px;
+    overflow: hidden;
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+  }
+
+  .theme-card:hover {
+    transform: translateY(-4px);
+    border-color: var(--border-active);
+    box-shadow: 0 12px 30px -8px var(--accent-glow);
+  }
+
+  .theme-card.active {
+    border-color: var(--border-active);
+    box-shadow: 0 0 0 2px var(--border-active), 0 12px 30px -8px var(--accent-glow);
+    background: rgba(255, 255, 255, 0.04);
+  }
+
+  .theme-card-info {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+
+  .theme-card-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-primary);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+
+  .theme-card-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    line-height: 1.4;
+  }
+
+  /* Mock Dashboard Window inside theme-card */
+  .theme-mock-window {
+    flex-grow: 1;
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .theme-mock-sidebar {
+    width: 30%;
+    border-right: 1px solid var(--border-color);
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+    padding: 8px;
+  }
+
+  .theme-mock-content {
+    flex-grow: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+  }
+
+  .theme-mock-bar {
+    height: 4px;
+    border-radius: 2px;
+    background: var(--text-muted);
+    opacity: 0.3;
+    width: 70%;
+    display: inline-block;
+  }
+
+  .theme-mock-pill {
+    height: 8px;
+    border-radius: 4px;
+    background: var(--text-muted);
+    opacity: 0.15;
+    width: 100%;
+  }
+
+  .theme-mock-accent-pill {
+    height: 8px;
+    border-radius: 4px;
+    width: 40%;
+  }
+
+  .theme-card-status {
+    position: absolute;
+    top: 16px;
+    right: 16px;
+    display: inline-flex;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 4px 10px;
+    border-radius: 20px;
+    border: 1px solid var(--border-color);
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text-secondary);
+    transition: var(--transition-smooth);
+  }
+
+  .theme-card.active .theme-card-status {
+    background: var(--accent-color);
+    color: #fff;
+    border-color: transparent;
+  }
 </style>
 </head>
 <body>
@@ -639,19 +762,23 @@
       <div class="traffic-light yellow"></div>
       <div class="traffic-light green"></div>
     </div>
-
+ 
     <div class="logo-area">
       <div class="logo-icon">
-        <svg viewBox="0 0 24 24"><path d="M12 2L2 22h20L12 2zm0 3.99L19.53 19H4.47L12 5.99zM13 16h-2v2h2v-2zm0-6h-2v4h2v-4z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px; color:#fff;">
+          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
+          <path d="M2 17l10 5 10-5"/>
+          <path d="M2 12l10 5 10-5"/>
+        </svg>
       </div>
       <div class="logo-text">qwen2api</div>
     </div>
-
+ 
     <div class="status-pill">
       <div class="status-dot"></div>
       <span>Gateway is running</span>
     </div>
-
+ 
     <ul class="nav-menu">
       <li class="nav-item active" onclick="switchTab('overview', this)">
         <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H6v-2h8v2zm3-4H6v-2h11v2zm0-4H6V7h11v2z"/></svg>
@@ -669,26 +796,23 @@
         <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
         Model Aliases
       </li>
+      <li class="nav-item" onclick="switchTab('models', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-dasharray="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+        Available Models
+      </li>
       <li class="nav-item" onclick="switchTab('keys', this)">
         <svg viewBox="0 0 24 24"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
         API Key Rotation
       </li>
       <li class="nav-item" onclick="switchTab('logs', this)">
         <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 12H4v-2h8v2zm8-4H4V8h16v4z"/></svg>
-        Giám sát Logs
+        Live Logs
+      </li>
+      <li class="nav-item" onclick="switchTab('settings', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        Settings
       </li>
     </ul>
-
-    <!-- Theme Selection Component -->
-    <div class="theme-box">
-      <div class="theme-box-title">Giao diện</div>
-      <div class="theme-grid">
-        <button class="theme-btn active" style="background: #E56A4A;" data-tooltip="9Router Charcoal" onclick="setTheme('midnight', this)"></button>
-        <button class="theme-btn" style="background: #ff00ff;" data-tooltip="Cyberpunk Neon" onclick="setTheme('cyberpunk', this)"></button>
-        <button class="theme-btn" style="background: #10b981;" data-tooltip="Forest Aura" onclick="setTheme('emerald', this)"></button>
-        <button class="theme-btn" style="background: #FDFAF6; border: 1px solid #e5e7eb;" data-tooltip="9Router Cream" onclick="setTheme('light', this)"></button>
-      </div>
-    </div>
   </aside>
 
   <!-- MAIN VIEWPORT -->
@@ -935,10 +1059,11 @@
         <div class="card" style="padding: 24px;">
           <div class="card-title-area" style="margin-bottom: 16px;">
             <div style="display: flex; align-items: center; gap: 12px;">
-              <h2>Giám sát Logs Trực tiếp</h2>
+              <h2>Live Logs Monitor</h2>
               <span id="logConnectionStatus" class="badge badge-danger">Stopped</span>
             </div>
             <div style="display: flex; gap: 10px;">
+              <button class="btn btn-secondary btn-sm" onclick="copyAllLogs()">Copy All</button>
               <button class="btn btn-secondary btn-sm" onclick="clearConsole()">Clear</button>
               <button class="btn btn-primary btn-sm" id="btnToggleScroll" onclick="toggleAutoScroll()">Autoscroll: On</button>
             </div>
@@ -962,6 +1087,198 @@
             </div>
             <div id="terminalConsole" style="height: 480px; overflow-y: auto; padding: 16px; font-family: var(--font-mono); font-size: 13px; line-height: 1.6; color: #a9b7c6; display: flex; flex-direction: column; gap: 8px;">
               <div style="color: #6a8759;">// Terminal initialized. Switch to logs tab to start live stream.</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- AVAILABLE MODELS PANEL -->
+      <div id="models" class="tab-panel">
+        <div class="card">
+          <div class="card-title-area">
+            <div>
+              <h2>Available Models & Sandbox</h2>
+              <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Dynamic verification and integration of all upstream Qwen models & aliases.</p>
+            </div>
+          </div>
+          
+          <div class="search-wrapper">
+            <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <input type="text" id="modelSearchInput" oninput="filterAvailableModels()" placeholder="Search models by ID, name, features, modality...">
+          </div>
+
+          <div style="overflow-x: auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>Model ID</th>
+                  <th>Model Name</th>
+                  <th>Modality</th>
+                  <th>Context Limit</th>
+                  <th>Capabilities</th>
+                  <th>Connection Check</th>
+                  <th style="text-align: right;">Action</th>
+                </tr>
+              </thead>
+              <tbody id="modelsTableBody">
+                <!-- Dynamically loaded standard models + custom aliases -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SYSTEM SETTINGS PANEL -->
+      <div id="settings" class="tab-panel">
+        <div class="card" style="max-width: 900px; padding: 32px;">
+          <div class="card-title-area" style="margin-bottom: 24px; border-bottom: 1px solid var(--border-color); padding-bottom: 16px;">
+            <div>
+              <h2 style="font-size: 20px; font-weight: 600;">System Settings</h2>
+              <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Personalize system behavior, gateway environment, and display themes.</p>
+            </div>
+          </div>
+          
+          <div style="margin-top: 24px;">
+            <h3 style="font-size: 13px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 16px; letter-spacing: 0.8px;">Personalize Dashboard Theme</h3>
+            
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;" id="themePreviewGrid">
+              
+              <!-- Midnight charcoal card -->
+              <div class="theme-card active" onclick="setDashboardTheme('midnight')" data-theme-id="midnight">
+                <div class="theme-card-info">
+                  <div class="theme-card-title">
+                    <span>Midnight Charcoal</span>
+                  </div>
+                  <div class="theme-card-desc">9Router premium dark with orange accent glow.</div>
+                </div>
+                
+                <!-- Mock Mini Dashboard Window -->
+                <div class="theme-mock-window" style="background: #1a1a1a; border-color: #333;">
+                  <div class="theme-mock-sidebar" style="background: #1e1e1e; border-color: #333;">
+                    <div style="display: flex; gap: 3px; margin-bottom: 4px;">
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FF5F56;"></span>
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FFBD2E;"></span>
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #27C93F;"></span>
+                    </div>
+                    <span class="theme-mock-bar" style="background: #E56A4A; opacity: 1; width: 85%;"></span>
+                    <span class="theme-mock-bar" style="width: 60%;"></span>
+                    <span class="theme-mock-bar" style="width: 50%;"></span>
+                  </div>
+                  <div class="theme-mock-content">
+                    <div style="display: flex; gap: 4px; margin-bottom: 2px;">
+                      <div style="flex: 1; height: 12px; border-radius: 3px; background: #262626; border: 1px solid #333; display: flex; align-items: center; padding-left: 3px;"><span style="width: 3px; height: 3px; border-radius: 50%; background: #22c55e;"></span></div>
+                      <div style="flex: 1; height: 12px; border-radius: 3px; background: #262626; border: 1px solid #333;"></div>
+                    </div>
+                    <div class="theme-mock-pill" style="background: #ededed; opacity: 0.1;"></div>
+                    <div class="theme-mock-accent-pill" style="background: #E56A4A; box-shadow: 0 0 4px rgba(229, 106, 74, 0.4);"></div>
+                  </div>
+                </div>
+                
+                <span class="theme-card-status">Active</span>
+              </div>
+
+              <!-- Cyberpunk Neon card -->
+              <div class="theme-card" onclick="setDashboardTheme('cyberpunk')" data-theme-id="cyberpunk">
+                <div class="theme-card-info">
+                  <div class="theme-card-title">
+                    <span>Cyberpunk Neon</span>
+                  </div>
+                  <div class="theme-card-desc">Vibrant synthwave neon pink and electric cyan.</div>
+                </div>
+                
+                <!-- Mock Mini Dashboard Window -->
+                <div class="theme-mock-window" style="background: #050508; border-color: #ff007f33;">
+                  <div class="theme-mock-sidebar" style="background: #070713; border-color: #ff007f33;">
+                    <div style="display: flex; gap: 3px; margin-bottom: 4px;">
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FF5F56;"></span>
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FFBD2E;"></span>
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #27C93F;"></span>
+                    </div>
+                    <span class="theme-mock-bar" style="background: #ff00ff; opacity: 1; width: 85%;"></span>
+                    <span class="theme-mock-bar" style="width: 60%; background: #00ffff; opacity: 0.6;"></span>
+                    <span class="theme-mock-bar" style="width: 50%;"></span>
+                  </div>
+                  <div class="theme-mock-content">
+                    <div style="display: flex; gap: 4px; margin-bottom: 2px;">
+                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(13, 13, 21, 0.85); border: 1px solid #ff007f33; display: flex; align-items: center; padding-left: 3px;"><span style="width: 3px; height: 3px; border-radius: 50%; background: #39ff14;"></span></div>
+                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(13, 13, 21, 0.85); border: 1px solid #ff007f33;"></div>
+                    </div>
+                    <div class="theme-mock-pill" style="background: #00ffff; opacity: 0.15;"></div>
+                    <div class="theme-mock-accent-pill" style="background: #ff00ff; box-shadow: 0 0 4px rgba(255, 0, 255, 0.4);"></div>
+                  </div>
+                </div>
+                
+                <span class="theme-card-status">Select</span>
+              </div>
+
+              <!-- Emerald Aura card -->
+              <div class="theme-card" onclick="setDashboardTheme('emerald')" data-theme-id="emerald">
+                <div class="theme-card-info">
+                  <div class="theme-card-title">
+                    <span>Emerald Aura</span>
+                  </div>
+                  <div class="theme-card-desc">Modern, relaxing glass green forest theme.</div>
+                </div>
+                
+                <!-- Mock Mini Dashboard Window -->
+                <div class="theme-mock-window" style="background: #06100c; border-color: rgba(16, 185, 129, 0.15);">
+                  <div class="theme-mock-sidebar" style="background: #082618; border-color: rgba(16, 185, 129, 0.15);">
+                    <div style="display: flex; gap: 3px; margin-bottom: 4px;">
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FF5F56;"></span>
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FFBD2E;"></span>
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #27C93F;"></span>
+                    </div>
+                    <span class="theme-mock-bar" style="background: #10b981; opacity: 1; width: 85%;"></span>
+                    <span class="theme-mock-bar" style="width: 60%;"></span>
+                    <span class="theme-mock-bar" style="width: 50%;"></span>
+                  </div>
+                  <div class="theme-mock-content">
+                    <div style="display: flex; gap: 4px; margin-bottom: 2px;">
+                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(10, 28, 20, 0.75); border: 1px solid rgba(16, 185, 129, 0.15); display: flex; align-items: center; padding-left: 3px;"><span style="width: 3px; height: 3px; border-radius: 50%; background: #34d399;"></span></div>
+                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(10, 28, 20, 0.75); border: 1px solid rgba(16, 185, 129, 0.15);"></div>
+                    </div>
+                    <div class="theme-mock-pill" style="background: #ecfdf5; opacity: 0.1;"></div>
+                    <div class="theme-mock-accent-pill" style="background: #10b981; box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);"></div>
+                  </div>
+                </div>
+                
+                <span class="theme-card-status">Select</span>
+              </div>
+
+              <!-- Light mode cream card -->
+              <div class="theme-card" onclick="setDashboardTheme('light')" data-theme-id="light">
+                <div class="theme-card-info">
+                  <div class="theme-card-title">
+                    <span>9Router Cream</span>
+                  </div>
+                  <div class="theme-card-desc">Warm soft cream mode for bright daylight reading.</div>
+                </div>
+                
+                <!-- Mock Mini Dashboard Window -->
+                <div class="theme-mock-window" style="background: #FDFAF6; border-color: #e5e7eb;">
+                  <div class="theme-mock-sidebar" style="background: #f4f1ec; border-color: #e5e7eb;">
+                    <div style="display: flex; gap: 3px; margin-bottom: 4px;">
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FF5F56;"></span>
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FFBD2E;"></span>
+                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #27C93F;"></span>
+                    </div>
+                    <span class="theme-mock-bar" style="background: #E56A4A; opacity: 1; width: 85%;"></span>
+                    <span class="theme-mock-bar" style="width: 60%; background: #6B7280;"></span>
+                    <span class="theme-mock-bar" style="width: 50%; background: #6B7280;"></span>
+                  </div>
+                  <div class="theme-mock-content">
+                    <div style="display: flex; gap: 4px; margin-bottom: 2px;">
+                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(255, 255, 255, 0.85); border: 1px solid #e5e7eb; display: flex; align-items: center; padding-left: 3px;"><span style="width: 3px; height: 3px; border-radius: 50%; background: #10B981;"></span></div>
+                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(255, 255, 255, 0.85); border: 1px solid #e5e7eb;"></div>
+                    </div>
+                    <div class="theme-mock-pill" style="background: #0a0a0a; opacity: 0.08;"></div>
+                    <div class="theme-mock-accent-pill" style="background: #E56A4A; box-shadow: 0 0 4px rgba(229, 106, 74, 0.25);"></div>
+                  </div>
+                </div>
+                
+                <span class="theme-card-status">Select</span>
+              </div>
+
             </div>
           </div>
         </div>
@@ -1023,8 +1340,15 @@
       document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
       document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
       
-      document.getElementById(tabId).classList.add('active');
-      if (el) el.classList.add('active');
+      const panel = document.getElementById(tabId);
+      if (panel) panel.classList.add('active');
+      
+      if (el) {
+        el.classList.add('active');
+      } else {
+        const matchingEl = document.querySelector(`.nav-item[onclick*="'${tabId}'"]`);
+        if (matchingEl) matchingEl.classList.add('active');
+      }
 
       const titles = {
         'overview': 'Dashboard Overview',
@@ -1032,7 +1356,9 @@
         'features': 'Advanced Feature Flags',
         'aliases': 'Model Compatibility Aliases',
         'keys': 'API Key Rotation Manager',
-        'logs': 'Giám sát Logs Trực tiếp'
+        'logs': 'Live Logs Monitor',
+        'models': 'Available Models & Sandbox',
+        'settings': 'System Settings'
       };
       document.getElementById('pageTitle').textContent = titles[tabId] || 'Dashboard';
 
@@ -1042,22 +1368,26 @@
     }
 
     // THEME HANDLING
-    function setTheme(themeName, btnEl) {
+    function setDashboardTheme(themeName) {
       document.documentElement.setAttribute('data-theme', themeName);
       localStorage.setItem('dashboard-theme', themeName);
       
-      document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
-      if (btnEl) {
-        btnEl.classList.add('active');
-      } else {
-        const matchingBtn = document.querySelector(`.theme-btn[data-tooltip*="${themeName === 'midnight' ? 'Charcoal' : themeName === 'cyberpunk' ? 'Cyber' : themeName === 'emerald' ? 'Forest' : 'Cream'}"]`);
-        if (matchingBtn) matchingBtn.classList.add('active');
+      document.querySelectorAll('.theme-card').forEach(card => {
+        card.classList.remove('active');
+        const badge = card.querySelector('span:last-child');
+        if (badge) badge.textContent = 'Select';
+      });
+      const activeCard = document.querySelector(`.theme-card[data-theme-id="${themeName}"]`);
+      if (activeCard) {
+        activeCard.classList.add('active');
+        const badge = activeCard.querySelector('span:last-child');
+        if (badge) badge.textContent = 'Active';
       }
     }
 
     // Load active theme
     const savedTheme = localStorage.getItem('dashboard-theme') || 'midnight';
-    setTheme(savedTheme);
+    setDashboardTheme(savedTheme);
 
     // API CONFIG REQUESTS
     async function refresh() {
@@ -1182,6 +1512,9 @@
 
       // Populate API Keys tab
       renderApiKeysTab();
+
+      // Populate Available Models tab
+      renderAvailableModels();
     }
 
     // TOKENS POOL MANAGEMENT
@@ -1722,6 +2055,163 @@
         } else {
           line.style.display = 'none';
         }
+      });
+    }
+
+    const STANDARD_MODELS = [
+      { id: "qwen3.6-plus", name: "Qwen3.6-Plus", modality: "text, image, video, audio", context: "1,000,000", thinking: "yes (auto)", search: "yes" },
+      { id: "qwen3.6-max-preview", name: "Qwen3.6-Max-Preview", modality: "text", context: "262,144", thinking: "yes", search: "no" },
+      { id: "qwen3.6-27b", name: "Qwen3.6-27B", modality: "text, image, video", context: "262,144", thinking: "yes", search: "no" },
+      { id: "qwen3.6-35b-a3b", name: "Qwen3.6-35B-A3B", modality: "text, image, video, audio", context: "262,144", thinking: "yes (auto)", search: "yes" },
+      { id: "qwen3.6-plus-preview", name: "Qwen3.6-Plus-Preview", modality: "text", context: "1,000,000", thinking: "yes", search: "no" },
+      { id: "qwen3.5-plus", name: "Qwen3.5-Plus", modality: "text, image, video, audio", context: "1,000,000", thinking: "yes (auto)", search: "yes" },
+      { id: "qwen3.5-flash", name: "Qwen3.5-Flash", modality: "text, image, video, audio", context: "1,000,000", thinking: "yes", search: "yes" },
+      { id: "qwen3.5-max-2026-03-08", name: "Qwen3.5-Max-Preview", modality: "text", context: "262,144", thinking: "yes", search: "no" },
+      { id: "qwen3.5-omni-plus", name: "Qwen3.5-Omni-Plus", modality: "text, image, video, audio", context: "262,144", thinking: "no", search: "no" },
+      { id: "qwen3.5-omni-flash", name: "Qwen3.5-Omni-Flash", modality: "text, image, video, audio", context: "262,144", thinking: "no", search: "no" },
+      { id: "qwen3.5-397b-a17b", name: "Qwen3.5-397B-A17B", modality: "text, image, video, audio", context: "262,144", thinking: "yes", search: "yes" },
+      { id: "qwen3.5-122b-a10b", name: "Qwen3.5-122B-A10B", modality: "text, image, video, audio", context: "262,144", thinking: "yes", search: "yes" },
+      { id: "qwen3.5-27b", name: "Qwen3.5-27B", modality: "text, image, video, audio", context: "262,144", thinking: "yes", search: "yes" },
+      { id: "qwen3.5-35b-a3b", name: "Qwen3.5-35B-A3B", modality: "text, image, video, audio", context: "262,144", thinking: "yes", search: "yes" },
+      { id: "qwen3-max-2026-01-23", name: "Qwen3-Max", modality: "text", context: "262,144", thinking: "yes", search: "yes" },
+      { id: "qwen3-coder-plus", name: "Qwen3-Coder", modality: "text", context: "1,048,576", thinking: "no", search: "no" },
+      { id: "qwen3-vl-plus", name: "Qwen3-VL-235B-A22B", modality: "text, image, video", context: "262,144", thinking: "yes", search: "no" },
+      { id: "qwen3-omni-flash-2025-12-01", name: "Qwen3-Omni-Flash", modality: "text, image, video, audio", context: "65,536", thinking: "yes", search: "no" },
+      { id: "qwen-plus-2025-07-28", name: "Qwen3-235B-A22B-2507", modality: "text", context: "131,072", thinking: "yes", search: "no" },
+      { id: "qwen-max-latest", name: "Qwen2.5-Max", modality: "text", context: "131,072", thinking: "yes", search: "no" }
+    ];
+
+    function renderAvailableModels() {
+      const tbody = document.getElementById('modelsTableBody');
+      if (!tbody) return;
+
+      const aliases = (currentData && currentData.model_aliases) || {};
+      let html = '';
+      
+      STANDARD_MODELS.forEach(m => {
+        const caps = [];
+        if (m.thinking !== 'no') caps.push('<span class="badge badge-success" style="font-size:10px; margin-right:4px;">Thinking</span>');
+        if (m.search !== 'no') caps.push('<span class="badge badge-warning" style="font-size:10px; margin-right:4px;">Search</span>');
+        if (m.modality.includes('image') || m.modality.includes('video') || m.modality.includes('audio')) {
+          caps.push('<span class="badge badge-success" style="font-size:10px; background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2);">Omni</span>');
+        }
+        const capStr = caps.length > 0 ? caps.join('') : '<span style="color:var(--text-muted); font-size:12px;">Standard</span>';
+
+        html += `
+          <tr data-model-search="${m.id} ${m.name} ${m.modality}">
+            <td style="font-weight:600;"><code style="font-family:var(--font-mono);color:var(--accent-color);">${m.id}</code></td>
+            <td>${m.name}</td>
+            <td><span style="font-size:12px;opacity:0.85;">${m.modality}</span></td>
+            <td style="font-variant-numeric: tabular-nums;">${parseInt(m.context).toLocaleString()}</td>
+            <td>${capStr}</td>
+            <td id="status-model-${m.id.replace(/\./g, '-')}" style="font-variant-numeric: tabular-nums;">
+              <span class="badge badge-warning" style="background: rgba(156,163,175,0.1); color: var(--text-secondary); border: 1px solid rgba(156,163,175,0.2);">Not Tested</span>
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <button class="btn btn-secondary btn-sm" style="margin-right:6px;" onclick="copyToClipboard('${m.id}')">Copy ID</button>
+              <button class="btn btn-primary btn-sm" id="btn-test-${m.id.replace(/\./g, '-')}" onclick="testModelConnectivity('${m.id}')">Test</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      Object.keys(aliases).forEach(aliasKey => {
+        const targetModel = aliases[aliasKey];
+        html += `
+          <tr data-model-search="${aliasKey} ${targetModel} custom alias">
+            <td style="font-weight:600;"><code style="font-family:var(--font-mono);color:#10b981;">${aliasKey}</code></td>
+            <td>
+              <span class="badge badge-success" style="background: rgba(16,185,129,0.15); color: #10b981; border: 1px solid rgba(16,185,129,0.2); font-size:10px; margin-right:6px;">Alias</span>
+              Maps to upstream
+            </td>
+            <td><code style="font-family:var(--font-mono);font-size:12px;opacity:0.8;">${targetModel}</code></td>
+            <td>—</td>
+            <td><span class="badge badge-success" style="background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); font-size:10px;">Custom Route</span></td>
+            <td id="status-model-${aliasKey.replace(/\./g, '-')}" style="font-variant-numeric: tabular-nums;">
+              <span class="badge badge-warning" style="background: rgba(156,163,175,0.1); color: var(--text-secondary); border: 1px solid rgba(156,163,175,0.2);">Not Tested</span>
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <button class="btn btn-secondary btn-sm" style="margin-right:6px;" onclick="copyToClipboard('${aliasKey}')">Copy ID</button>
+              <button class="btn btn-primary btn-sm" id="btn-test-${aliasKey.replace(/\./g, '-')}" onclick="testModelConnectivity('${aliasKey}')">Test</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      tbody.innerHTML = html;
+    }
+
+    function filterAvailableModels() {
+      const q = document.getElementById('modelSearchInput').value.toLowerCase().trim();
+      const rows = document.querySelectorAll('#modelsTableBody tr');
+      rows.forEach(row => {
+        const text = row.getAttribute('data-model-search') || '';
+        if (!q || text.toLowerCase().includes(q)) {
+          row.style.display = '';
+        } else {
+          row.style.display = 'none';
+        }
+      });
+    }
+
+    async function testModelConnectivity(modelId) {
+      const escapedId = modelId.replace(/\./g, '-');
+      const statusCell = document.getElementById(`status-model-${escapedId}`);
+      const btn = document.getElementById(`btn-test-${escapedId}`);
+      
+      if (!statusCell) return;
+      statusCell.innerHTML = `<span class="badge badge-warning">Testing...</span>`;
+      if (btn) btn.disabled = true;
+
+      try {
+        const r = await fetch('/admin/models/test', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ model: modelId })
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        const res = await r.json();
+        
+        if (res.status === 'live') {
+          statusCell.innerHTML = `<span class="badge badge-success" style="font-variant-numeric: tabular-nums;">Live (${res.latency_ms}ms)</span>`;
+          showToast(`Model ${modelId} is live! Latency: ${res.latency_ms}ms`, "success");
+        } else {
+          statusCell.innerHTML = `<span class="badge badge-danger" title="${res.error || 'Unknown Error'}">Die</span>`;
+          showToast(`Model ${modelId} check failed: ${res.error || 'Unknown Error'}`, "error");
+        }
+      } catch (e) {
+        statusCell.innerHTML = `<span class="badge badge-danger" title="${e.message}">Error</span>`;
+        showToast(`Test failed: ${e.message}`, "error");
+      } finally {
+        if (btn) btn.disabled = false;
+      }
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text).then(() => {
+        showToast("Model ID copied: " + text, "success");
+      }).catch(err => {
+        showToast("Copy failed: " + err, "error");
+      });
+    }
+
+    function copyAllLogs() {
+      const lines = document.querySelectorAll('#terminalConsole .log-line');
+      if (lines.length === 0) {
+        showToast("No logs in terminal to copy", "error");
+        return;
+      }
+      let outputText = '';
+      lines.forEach(line => {
+        outputText += line.innerText + '\n';
+      });
+      navigator.clipboard.writeText(outputText).then(() => {
+        showToast(`Copied ${lines.length} lines of log stream`, "success");
+      }).catch(err => {
+        showToast("Copy failed: " + err, "error");
       });
     }
 

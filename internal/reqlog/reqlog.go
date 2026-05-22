@@ -70,30 +70,28 @@ func NewLogger(path string, maxSizeMB, maxBackups, truncateLen int) (*Logger, er
 	}, nil
 }
 
-// Log writes one entry.
-func (l *Logger) Log(e Entry) {
+// Log writes one entry, optionally to file, and always broadcasts to subscribers.
+func (l *Logger) Log(e Entry, writeToFile bool) {
 	if l == nil {
 		return
 	}
 	if e.Time == "" {
 		e.Time = time.Now().UTC().Format(time.RFC3339Nano)
 	}
-	l.mu.Lock()
-	if err := l.rotateIfNeeded(); err != nil {
+	if writeToFile && l.file != nil {
+		l.mu.Lock()
+		if err := l.rotateIfNeeded(); err == nil {
+			raw, err := json.Marshal(e)
+			if err == nil {
+				if l.truncateLen > 0 && len(raw) > l.truncateLen {
+					raw = append(raw[:l.truncateLen], '"', '}')
+				}
+				_, _ = l.file.Write(raw)
+				_, _ = l.file.WriteString("\n")
+			}
+		}
 		l.mu.Unlock()
-		return
 	}
-	raw, err := json.Marshal(e)
-	if err != nil {
-		l.mu.Unlock()
-		return
-	}
-	if l.truncateLen > 0 && len(raw) > l.truncateLen {
-		raw = append(raw[:l.truncateLen], '"', '}')
-	}
-	_, _ = l.file.Write(raw)
-	_, _ = l.file.WriteString("\n")
-	l.mu.Unlock()
 
 	go l.Broadcast(e)
 }

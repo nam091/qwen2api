@@ -52,13 +52,11 @@ func New(deps Deps) http.Handler {
 	r.Get("/healthz", h.health)
 	r.Get("/readyz", h.ready)
 
-	if deps.Config.Features.Metrics && deps.Metrics != nil {
+	if deps.Metrics != nil {
 		r.Get("/metrics", h.prometheusMetrics)
 	}
-	if deps.Config.Features.Dashboard {
-		r.Get("/dashboard", h.dashboard)
-		r.Get("/dashboard/data", h.dashboardData)
-	}
+	r.Get("/dashboard", h.dashboard)
+	r.Get("/dashboard/data", h.dashboardData)
 
 	// OpenAI-compatible surface, accessible both at /v1/* and at the root for
 	// clients that strip the version prefix.
@@ -68,22 +66,18 @@ func New(deps Deps) http.Handler {
 		r.Get("/models", h.listModels)
 		r.Post("/v1/chat/completions", h.chatCompletions)
 		r.Post("/chat/completions", h.chatCompletions)
-		if deps.Config.Features.Embeddings {
-			r.Post("/v1/embeddings", h.embeddings)
-			r.Post("/embeddings", h.embeddings)
-		}
+		r.Post("/v1/embeddings", h.embeddings)
+		r.Post("/embeddings", h.embeddings)
 		// Claude API compatibility
 		r.Post("/anthropic/v1/messages", h.claudeMessages)
 	})
 
-	if deps.Config.Features.APIKeyRotation {
-		r.Group(func(r chi.Router) {
-			r.Use(h.adminMiddleware)
-			r.Get("/admin/keys", h.listAPIKeys)
-			r.Post("/admin/keys", h.createAPIKey)
-			r.Delete("/admin/keys/{value}", h.deleteAPIKey)
-		})
-	}
+	r.Group(func(r chi.Router) {
+		r.Use(h.adminMiddleware)
+		r.Get("/admin/keys", h.listAPIKeys)
+		r.Post("/admin/keys", h.createAPIKey)
+		r.Delete("/admin/keys/{value}", h.deleteAPIKey)
+	})
 
 	// Config management API (admin only)
 	r.Group(func(r chi.Router) {
@@ -94,6 +88,7 @@ func New(deps Deps) http.Handler {
 		r.Delete("/admin/config/tokens", h.removeToken)
 		r.Put("/admin/config/aliases", h.updateModelAliases)
 		r.Get("/admin/logs/stream", h.streamLogs)
+		r.Post("/admin/models/test", h.testModel)
 	})
 
 	return r

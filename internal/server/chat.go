@@ -197,7 +197,7 @@ func (h *handlers) logRequest(r *http.Request, req openai.ChatRequest, token str
 	if err != nil {
 		entry.Error = err.Error()
 	}
-	h.deps.ReqLog.Log(entry)
+	h.deps.ReqLog.Log(entry, h.deps.Config.Features.RequestLogging)
 }
 
 // shouldRetry returns true if the error indicates a token problem worth retrying with another token.
