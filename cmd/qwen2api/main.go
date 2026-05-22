@@ -71,11 +71,13 @@ func run() error {
 	}
 
 	var reqLogger *reqlog.Logger
-	rl, err := reqlog.NewLogger(cfg.Logging.Path, cfg.Logging.MaxSizeMB, cfg.Logging.MaxBackups, cfg.Logging.TruncateLen)
-	if err != nil {
-		logger.Warn("request logging init failed", "err", err)
-	} else {
-		reqLogger = rl
+	if cfg.Features.RequestLogging {
+		rl, err := reqlog.NewLogger(cfg.Logging.Path, cfg.Logging.MaxSizeMB, cfg.Logging.MaxBackups, cfg.Logging.TruncateLen)
+		if err != nil {
+			logger.Warn("request logging init failed", "err", err)
+		} else {
+			reqLogger = rl
+		}
 	}
 
 	// tokenHealthLoop runs unconditionally but checks Features.AutoTokenRefresh dynamically.

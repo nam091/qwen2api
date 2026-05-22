@@ -256,12 +256,6 @@ func (h *handlers) streamLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	defer h.deps.ReqLog.Unsubscribe(logChan)
 
-	flusher, ok := w.(http.Flusher)
-	if !ok {
-		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
-		return
-	}
-
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -274,7 +268,9 @@ func (h *handlers) streamLogs(w http.ResponseWriter, r *http.Request) {
 
 	// Initial message to verify connection
 	_, _ = fmt.Fprintf(w, "event: connected\ndata: {\"status\":\"connected\"}\n\n")
-	flusher.Flush()
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 
 	for {
 		select {
@@ -282,7 +278,9 @@ func (h *handlers) streamLogs(w http.ResponseWriter, r *http.Request) {
 			return
 		case <-ticker.C:
 			_, _ = fmt.Fprintf(w, "event: ping\ndata: {}\n\n")
-			flusher.Flush()
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
 		case entry, ok := <-logChan:
 			if !ok {
 				return
@@ -292,7 +290,9 @@ func (h *handlers) streamLogs(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
-			flusher.Flush()
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
 		}
 	}
 }
@@ -457,4 +457,10 @@ func (h *handlers) shutdownServer(w http.ResponseWriter, r *http.Request) {
 		os.Exit(0)
 	}()
 }
+
+// noopFlusher is a no-op implementation of http.Flusher for environments
+// that don't support streaming (e.g., some proxy configurations).
+type noopFlusher struct{}
+
+func (f *noopFlusher) Flush() {}
 

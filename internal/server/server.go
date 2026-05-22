@@ -98,6 +98,11 @@ func New(deps Deps) http.Handler {
 		r.Post("/admin/tunnel/start", h.startTunnel)
 		r.Post("/admin/tunnel/stop", h.stopTunnel)
 		r.Post("/admin/shutdown", h.shutdownServer)
+
+		// CLI Config management
+		r.Get("/admin/cliconfig/status", h.getCliConfigStatus)
+		r.Post("/admin/cliconfig/apply", h.applyCliConfig)
+		r.Post("/admin/cliconfig/reset", h.resetCliConfig)
 	})
 
 	return r

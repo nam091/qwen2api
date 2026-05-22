@@ -120,6 +120,7 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				h.metricsInc("qwen2api_no_upstream_token_total")
 				writeError(w, http.StatusServiceUnavailable, "no_upstream_token", "no Qwen token configured; set QWEN2API_TOKENS")
+				h.logRequest(r, req, "", http.StatusServiceUnavailable, time.Since(start), false, 0, err)
 				return
 			}
 		}

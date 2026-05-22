@@ -929,6 +929,10 @@
         <span class="material-symbols-outlined" style="font-size:18px;">deployed_code</span>
         Available Models
       </li>
+      <li class="nav-item" onclick="switchTab('clitools', this)">
+        <span class="material-symbols-outlined" style="font-size:18px;">developer_mode</span>
+        CLI Config
+      </li>
       <li class="nav-item" onclick="switchTab('logs', this)">
         <span class="material-symbols-outlined" style="font-size:18px;">terminal</span>
         Live Logs
@@ -1271,6 +1275,294 @@
       </div>
 
 
+      <!-- CLI TOOLS PANEL -->
+      <div id="clitools" class="tab-panel">
+        <div class="grid-details" style="grid-template-columns: 1fr 1fr; gap: 24px;">
+          
+          <!-- CLAUDE CODE CARD -->
+          <div class="card" style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="card-title-area" style="margin-bottom: 0; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #cc805c, #e56a4a); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px var(--accent-glow);">
+                  <span class="material-symbols-outlined" style="font-size:20px; color:#fff;">terminal</span>
+                </div>
+                <div>
+                  <h2 style="font-size: 16px; font-weight: 600;">Claude Code CLI</h2>
+                  <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px;">~/.claude/settings.json</div>
+                </div>
+              </div>
+              <span id="claudeStatusBadge" class="badge badge-danger">Checking...</span>
+            </div>
+
+            <!-- Path/Config Status Details -->
+            <div style="background: rgba(0,0,0,0.15); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 12.5px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Installed on PATH:</span>
+                <span id="claudeInstalledText" style="font-weight: 600;">--</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Current API URL:</span>
+                <span id="claudeUrlText" style="font-family: var(--font-mono); font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 250px;" title="">--</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Sonnet Model:</span>
+                <span id="claudeSonnetText" style="font-family: var(--font-mono); font-weight: 600;">--</span>
+              </div>
+            </div>
+
+            <!-- Form -->
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Qwen2API Base URL (Local or Public Tunnel)</label>
+                <input type="text" id="claudeBaseUrl" placeholder="http://localhost:15001" style="background: rgba(0,0,0,0.2);">
+                <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Empty defaults to Qwen2API's listen port. (Suffix <code style="font-family:var(--font-mono); opacity:0.85;">/v1</code> auto-added).</span>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>API Key (Authorized Client Key)</label>
+                <select id="claudeApiKey" style="background: rgba(0,0,0,0.2);">
+                  <!-- Populated from currentData.api_keys -->
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Default Sonnet Model Mapping</label>
+                <input type="text" id="claudeSonnetModel" list="cliModelList" placeholder="e.g. qwen3.5-plus" style="background: rgba(0,0,0,0.2);">
+              </div>
+
+              <!-- Collapsible Advanced Settings -->
+              <details style="cursor: pointer;">
+                <summary style="font-size: 13px; color: var(--accent-color); font-weight: 500; margin-bottom: 12px; outline: none; user-select: none;">Advanced Models</summary>
+                <div style="display: flex; flex-direction: column; gap: 12px; padding: 4px 0 12px 12px; border-left: 2px solid var(--border-color);">
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label>Default Opus Model Mapping</label>
+                    <input type="text" id="claudeOpusModel" list="cliModelList" placeholder="e.g. qwen-max" style="background: rgba(0,0,0,0.2);">
+                  </div>
+                  <div class="form-group" style="margin-bottom: 0;">
+                    <label>Default Haiku Model Mapping</label>
+                    <input type="text" id="claudeHaikuModel" list="cliModelList" placeholder="e.g. qwen-turbo" style="background: rgba(0,0,0,0.2);">
+                  </div>
+                </div>
+              </details>
+
+              <div style="display: flex; gap: 12px; margin-top: 10px;">
+                <button class="btn btn-secondary" onclick="resetCliConfig('claude')" style="flex: 1; justify-content: center; background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.15); color: var(--color-danger);">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">restore</span>
+                  Reset
+                </button>
+                <button class="btn btn-primary btn-shimmer" onclick="applyCliConfig('claude')" style="flex: 1.5; justify-content: center;">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">bolt</span>
+                  Apply to Claude CLI
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- CLINE CARD -->
+          <div class="card" style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="card-title-area" style="margin-bottom: 0; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #5850ec, #8f85f3); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(88, 80, 236, 0.25);">
+                  <span class="material-symbols-outlined" style="font-size:20px; color:#fff;">smart_toy</span>
+                </div>
+                <div>
+                  <h2 style="font-size: 16px; font-weight: 600;">Cline CLI / Extension</h2>
+                  <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px;">~/.cline/data/globalState.json</div>
+                </div>
+              </div>
+              <span id="clineStatusBadge" class="badge badge-danger">Checking...</span>
+            </div>
+
+            <!-- Path/Config Status Details -->
+            <div style="background: rgba(0,0,0,0.15); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 12.5px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Installed on PATH:</span>
+                <span id="clineInstalledText" style="font-weight: 600;">--</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Current API URL:</span>
+                <span id="clineUrlText" style="font-family: var(--font-mono); font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 250px;" title="">--</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Active Model:</span>
+                <span id="clineModelText" style="font-family: var(--font-mono); font-weight: 600;">--</span>
+              </div>
+            </div>
+
+            <!-- Form -->
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Qwen2API Base URL (Local or Public Tunnel)</label>
+                <input type="text" id="clineBaseUrl" placeholder="http://localhost:15001" style="background: rgba(0,0,0,0.2);">
+                <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Empty defaults to Qwen2API's listen port. (Suffix <code style="font-family:var(--font-mono); opacity:0.85;">/v1</code> is NOT added for Cline).</span>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>API Key (Authorized Client Key)</label>
+                <select id="clineApiKey" style="background: rgba(0,0,0,0.2);">
+                  <!-- Populated from currentData.api_keys -->
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Active Model mapping</label>
+                <input type="text" id="clineModel" list="cliModelList" placeholder="e.g. qwen3.5-plus" style="background: rgba(0,0,0,0.2);">
+              </div>
+
+              <!-- Spacer to align the buttons vertically with Claude's card -->
+              <div style="height: 38px; content: ''; display: block;"></div>
+
+              <div style="display: flex; gap: 12px; margin-top: 10px;">
+                <button class="btn btn-secondary" onclick="resetCliConfig('cline')" style="flex: 1; justify-content: center; background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.15); color: var(--color-danger);">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">restore</span>
+                  Reset
+                </button>
+                <button class="btn btn-primary btn-shimmer" onclick="applyCliConfig('cline')" style="flex: 1.5; justify-content: center; background: #5850ec; box-shadow: 0 8px 24px -8px rgba(88, 80, 236, 0.35);">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">bolt</span>
+                  Apply to Cline CLI
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- DEEPSEEK TUI CARD -->
+          <div class="card" style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="card-title-area" style="margin-bottom: 0; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #4d6bfe, #8097ff); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(77, 107, 254, 0.25);">
+                  <span class="material-symbols-outlined" style="font-size:20px; color:#fff;">terminal</span>
+                </div>
+                <div>
+                  <h2 style="font-size: 16px; font-weight: 600;">DeepSeek TUI</h2>
+                  <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px;">~/.deepseek/config.toml</div>
+                </div>
+              </div>
+              <span id="deepseekStatusBadge" class="badge badge-danger">Checking...</span>
+            </div>
+
+            <!-- Path/Config Status Details -->
+            <div style="background: rgba(0,0,0,0.15); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 12.5px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Installed on PATH:</span>
+                <span id="deepseekInstalledText" style="font-weight: 600;">--</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Current API URL:</span>
+                <span id="deepseekUrlText" style="font-family: var(--font-mono); font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 250px;" title="">--</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Active Model:</span>
+                <span id="deepseekModelText" style="font-family: var(--font-mono); font-weight: 600;">--</span>
+              </div>
+            </div>
+
+            <!-- Form -->
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Qwen2API Base URL (Local or Public Tunnel)</label>
+                <input type="text" id="deepseekBaseUrl" placeholder="http://localhost:15001" style="background: rgba(0,0,0,0.2);">
+                <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Empty defaults to Qwen2API's listen port. (Suffix <code style="font-family:var(--font-mono); opacity:0.85;">/v1</code> auto-added).</span>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>API Key (Authorized Client Key)</label>
+                <select id="deepseekApiKey" style="background: rgba(0,0,0,0.2);">
+                  <!-- Populated from currentData.api_keys -->
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Active Model mapping</label>
+                <input type="text" id="deepseekModel" list="cliModelList" placeholder="e.g. qwen3.5-plus" style="background: rgba(0,0,0,0.2);">
+              </div>
+
+              <!-- Spacer to align buttons -->
+              <div style="height: 38px; content: ''; display: block;"></div>
+
+              <div style="display: flex; gap: 12px; margin-top: 10px;">
+                <button class="btn btn-secondary" onclick="resetCliConfig('deepseek')" style="flex: 1; justify-content: center; background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.15); color: var(--color-danger);">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">restore</span>
+                  Reset
+                </button>
+                <button class="btn btn-primary btn-shimmer" onclick="applyCliConfig('deepseek')" style="flex: 1.5; justify-content: center; background: #4d6bfe; box-shadow: 0 8px 24px -8px rgba(77, 107, 254, 0.35);">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">bolt</span>
+                  Apply to DeepSeek TUI
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- QWEN CODE CLI CARD -->
+          <div class="card" style="display: flex; flex-direction: column; gap: 20px;">
+            <div class="card-title-area" style="margin-bottom: 0; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+              <div style="display: flex; align-items: center; gap: 12px;">
+                <div style="width: 36px; height: 36px; background: linear-gradient(135deg, #10B981, #34D399); border-radius: 8px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px rgba(16, 185, 129, 0.25);">
+                  <span class="material-symbols-outlined" style="font-size:20px; color:#fff;">psychology</span>
+                </div>
+                <div>
+                  <h2 style="font-size: 16px; font-weight: 600;">Qwen Code CLI</h2>
+                  <div style="font-size: 11px; color: var(--text-muted); font-family: var(--font-mono); margin-top: 2px;">~/.qwen/settings.json</div>
+                </div>
+              </div>
+              <span id="qwenStatusBadge" class="badge badge-danger">Checking...</span>
+            </div>
+
+            <!-- Path/Config Status Details -->
+            <div style="background: rgba(0,0,0,0.15); padding: 12px 16px; border-radius: 8px; border: 1px solid var(--border-color); font-size: 12.5px; display: flex; flex-direction: column; gap: 8px;">
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Installed on PATH:</span>
+                <span id="qwenInstalledText" style="font-weight: 600;">--</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Current API URL:</span>
+                <span id="qwenUrlText" style="font-family: var(--font-mono); font-weight: 600; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; max-width: 250px;" title="">--</span>
+              </div>
+              <div style="display: flex; justify-content: space-between;">
+                <span style="color: var(--text-secondary);">Active Model:</span>
+                <span id="qwenModelText" style="font-family: var(--font-mono); font-weight: 600;">--</span>
+              </div>
+            </div>
+
+            <!-- Form -->
+            <div style="display: flex; flex-direction: column; gap: 16px;">
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Qwen2API Base URL (Local or Public Tunnel)</label>
+                <input type="text" id="qwenBaseUrl" placeholder="http://localhost:15001" style="background: rgba(0,0,0,0.2);">
+                <span style="font-size: 11px; color: var(--text-muted); margin-top: 4px; display: block;">Empty defaults to Qwen2API's listen port. (Suffix <code style="font-family:var(--font-mono); opacity:0.85;">/v1</code> auto-added).</span>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>API Key (Authorized Client Key)</label>
+                <select id="qwenApiKey" style="background: rgba(0,0,0,0.2);">
+                  <!-- Populated from currentData.api_keys -->
+                </select>
+              </div>
+
+              <div class="form-group" style="margin-bottom: 0;">
+                <label>Active Model mapping</label>
+                <input type="text" id="qwenModel" list="cliModelList" placeholder="e.g. qwen-max" style="background: rgba(0,0,0,0.2);">
+              </div>
+
+              <!-- Spacer to align buttons -->
+              <div style="height: 38px; content: ''; display: block;"></div>
+
+              <div style="display: flex; gap: 12px; margin-top: 10px;">
+                <button class="btn btn-secondary" onclick="resetCliConfig('qwen')" style="flex: 1; justify-content: center; background: rgba(239, 68, 68, 0.05); border-color: rgba(239, 68, 68, 0.15); color: var(--color-danger);">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">restore</span>
+                  Reset
+                </button>
+                <button class="btn btn-primary btn-shimmer" onclick="applyCliConfig('qwen')" style="flex: 1.5; justify-content: center; background: #10B981; box-shadow: 0 8px 24px -8px rgba(16, 185, 129, 0.35);">
+                  <span class="material-symbols-outlined" style="font-size: 16px;">bolt</span>
+                  Apply to Qwen Code CLI
+                </button>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+
+
       <!-- LOGS PANEL -->
       <div id="logs" class="tab-panel">
         <div class="card" style="padding: 24px;">
@@ -1509,7 +1801,7 @@
       </div>
       <div class="form-group">
         <label>Real Upstream Target Model *</label>
-        <input type="text" id="aliasValue" placeholder="e.g. qwen-max">
+        <input type="text" id="aliasValue" list="cliModelList" placeholder="e.g. qwen-max">
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" onclick="closeModal('addAliasModal')">Cancel</button>
@@ -1570,6 +1862,7 @@
         'features': 'Advanced Feature Flags',
         'aliases': 'Model Compatibility Aliases',
         'models': 'Available Models & Sandbox',
+        'clitools': 'CLI Tools Auto-Config',
         'logs': 'Live Logs Monitor',
         'settings': 'System Settings'
       };
@@ -1581,6 +1874,7 @@
         'features': 'Enable or disable gateway features',
         'aliases': 'Manage model routing aliases',
         'models': 'List and test upstream models',
+        'clitools': 'Automatically configure environment settings for local Claude Code and Cline extensions',
         'logs': 'Real-time gateway event monitoring',
         'settings': 'Configure system parameters and themes'
       };
@@ -1605,6 +1899,12 @@
 
       if (tabId === 'logs') {
         connectLogStream();
+      } else {
+        disconnectLogStream();
+      }
+
+      if (tabId === 'clitools') {
+        refreshCliConfigStatus();
       }
     }
 
@@ -1950,6 +2250,9 @@
 
       // Render tokens usage chart
       updateTokenChart(d.tokens || []);
+
+      // Populate CLI Config elements
+      populateCliConfigDropdowns(d);
     }
 
     // TOKENS POOL MANAGEMENT
@@ -2146,7 +2449,7 @@
           <tr data-alias-key="${k}" data-alias-val="${aliases[k]}">
             <td><code style="font-family:var(--font-mono);font-size:13px;font-weight:600;color:var(--accent-color);">${k}</code></td>
             <td>
-              <input type="text" class="alias-input-inline" id="aliasInputVal-${k}" value="${aliases[k]}" style="width: 80%; display: inline-block;">
+              <input type="text" class="alias-input-inline" id="aliasInputVal-${k}" value="${aliases[k]}" list="cliModelList" style="width: 80%; display: inline-block;">
               <button class="btn btn-secondary btn-sm" onclick="updateAliasInline('${k}')">Save</button>
             </td>
             <td style="text-align: right;">
@@ -3046,6 +3349,265 @@
         showToast('Tunnel URL copied: ' + url, 'success');
       }).catch(err => {
         showToast('Copy failed: ' + err, 'error');
+      });
+    }
+
+    // CLI CONFIG INTEGRATION
+    async function refreshCliConfigStatus() {
+      if (!adminToken) return;
+
+      try {
+        const r = await fetch('/admin/cliconfig/status', {
+          headers: { 'Authorization': 'Bearer ' + adminToken }
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+
+        updateCliToolCardUI('claude', data.claude);
+        updateCliToolCardUI('cline', data.cline);
+        updateCliToolCardUI('deepseek', data.deepseek);
+        updateCliToolCardUI('qwen', data.qwen);
+      } catch (e) {
+        console.error('Failed to fetch CLI config status:', e);
+        showToast('Failed to check CLI config status: ' + e.message, 'error');
+      }
+    }
+
+    function updateCliToolCardUI(tool, status) {
+      if (!status) return;
+
+      const badge = document.getElementById(tool + 'StatusBadge');
+      const installedText = document.getElementById(tool + 'InstalledText');
+      const urlText = document.getElementById(tool + 'UrlText');
+      const modelText = document.getElementById(tool + 'ModelText');
+      const sonnetText = document.getElementById(tool + 'SonnetText'); // Claude only
+
+      if (badge) {
+        if (status.has_config) {
+          badge.textContent = 'Configured';
+          badge.className = 'badge badge-success';
+        } else if (status.installed) {
+          badge.textContent = 'Not Configured';
+          badge.className = 'badge badge-warning';
+        } else {
+          badge.textContent = 'Not Installed';
+          badge.className = 'badge badge-danger';
+        }
+      }
+
+      if (installedText) {
+        if (status.installed) {
+          installedText.innerHTML = '<span style="color: var(--color-success); font-weight:600;">Yes</span>';
+        } else {
+          installedText.innerHTML = '<span style="color: var(--text-muted);">No</span>';
+        }
+      }
+
+      const settings = status.settings || {};
+
+      if (tool === 'claude') {
+        const env = settings.env || {};
+        const baseUrl = env.ANTHROPIC_BASE_URL || '';
+        const sonnetVal = env.ANTHROPIC_DEFAULT_SONNET_MODEL || '';
+        const opusVal = env.ANTHROPIC_DEFAULT_OPUS_MODEL || '';
+        const haikuVal = env.ANTHROPIC_DEFAULT_HAIKU_MODEL || '';
+
+        if (urlText) urlText.textContent = baseUrl || '—';
+        if (sonnetText) sonnetText.textContent = sonnetVal || '—';
+
+        const inpUrl = document.getElementById('claudeBaseUrl');
+        if (inpUrl && !inpUrl.value) inpUrl.value = baseUrl;
+        const inpSonnet = document.getElementById('claudeSonnetModel');
+        if (inpSonnet && !inpSonnet.value) inpSonnet.value = sonnetVal;
+        const inpOpus = document.getElementById('claudeOpusModel');
+        if (inpOpus && !inpOpus.value) inpOpus.value = opusVal;
+        const inpHaiku = document.getElementById('claudeHaikuModel');
+        if (inpHaiku && !inpHaiku.value) inpHaiku.value = haikuVal;
+
+      } else if (tool === 'cline') {
+        const baseUrl = settings.openAiBaseUrl || '';
+        const modelVal = settings.openAiModelId || '';
+
+        if (urlText) urlText.textContent = baseUrl || '—';
+        if (modelText) modelText.textContent = modelVal || '—';
+
+        const inpUrl = document.getElementById('clineBaseUrl');
+        if (inpUrl && !inpUrl.value) inpUrl.value = baseUrl;
+        const inpModel = document.getElementById('clineModel');
+        if (inpModel && !inpModel.value) inpModel.value = modelVal;
+
+      } else if (tool === 'deepseek') {
+        const baseUrl = settings.base_url || '';
+        const modelVal = settings.model || '';
+
+        if (urlText) urlText.textContent = baseUrl || '—';
+        if (modelText) modelText.textContent = modelVal || '—';
+
+        const inpUrl = document.getElementById('deepseekBaseUrl');
+        if (inpUrl && !inpUrl.value) inpUrl.value = baseUrl;
+        const inpModel = document.getElementById('deepseekModel');
+        if (inpModel && !inpModel.value) inpModel.value = modelVal;
+
+      } else if (tool === 'qwen') {
+        const security = settings.security || {};
+        const auth = security.auth || {};
+        const baseUrl = auth.baseUrl || '';
+        const modelObj = settings.model || {};
+        const modelVal = modelObj.name || '';
+
+        if (urlText) urlText.textContent = baseUrl || '—';
+        if (modelText) modelText.textContent = modelVal || '—';
+
+        const inpUrl = document.getElementById('qwenBaseUrl');
+        if (inpUrl && !inpUrl.value) inpUrl.value = baseUrl;
+        const inpModel = document.getElementById('qwenModel');
+        if (inpModel && !inpModel.value) inpModel.value = modelVal;
+      }
+    }
+
+    async function applyCliConfig(tool) {
+      if (!adminToken) {
+        showToast("Admin token required", "error");
+        return;
+      }
+
+      let payload = { tool: tool };
+
+      if (tool === 'claude') {
+        payload.base_url = document.getElementById('claudeBaseUrl').value.trim();
+        payload.api_key = document.getElementById('claudeApiKey').value;
+        payload.sonnet_model = document.getElementById('claudeSonnetModel').value.trim();
+        payload.opus_model = document.getElementById('claudeOpusModel').value.trim();
+        payload.haiku_model = document.getElementById('claudeHaikuModel').value.trim();
+      } else if (tool === 'cline') {
+        payload.base_url = document.getElementById('clineBaseUrl').value.trim();
+        payload.api_key = document.getElementById('clineApiKey').value;
+        payload.model = document.getElementById('clineModel').value.trim();
+      } else if (tool === 'deepseek') {
+        payload.base_url = document.getElementById('deepseekBaseUrl').value.trim();
+        payload.api_key = document.getElementById('deepseekApiKey').value;
+        payload.model = document.getElementById('deepseekModel').value.trim();
+      } else if (tool === 'qwen') {
+        payload.base_url = document.getElementById('qwenBaseUrl').value.trim();
+        payload.api_key = document.getElementById('qwenApiKey').value;
+        payload.model = document.getElementById('qwenModel').value.trim();
+      }
+
+      try {
+        const r = await fetch('/admin/cliconfig/apply', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(payload)
+        });
+        if (!r.ok) {
+          const errData = await r.json();
+          throw new Error(errData.error || 'HTTP ' + r.status);
+        }
+        const res = await r.json();
+        showToast(res.message || `Configuration applied successfully for ${tool}!`, "success");
+        await refreshCliConfigStatus();
+      } catch (e) {
+        showToast(`Failed to apply config: ` + e.message, "error");
+      }
+    }
+
+    async function resetCliConfig(tool) {
+      if (!adminToken) {
+        showToast("Admin token required", "error");
+        return;
+      }
+
+      if (!confirm(`Are you sure you want to reset the configuration for ${tool} to defaults?`)) {
+        return;
+      }
+
+      try {
+        const r = await fetch('/admin/cliconfig/reset', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({ tool: tool })
+        });
+        if (!r.ok) {
+          const errData = await r.json();
+          throw new Error(errData.error || 'HTTP ' + r.status);
+        }
+        const res = await r.json();
+        showToast(res.message || `Configuration reset successfully for ${tool}!`, "success");
+        
+        if (tool === 'claude') {
+          document.getElementById('claudeBaseUrl').value = '';
+          document.getElementById('claudeSonnetModel').value = '';
+          document.getElementById('claudeOpusModel').value = '';
+          document.getElementById('claudeHaikuModel').value = '';
+        } else if (tool === 'cline') {
+          document.getElementById('clineBaseUrl').value = '';
+          document.getElementById('clineModel').value = '';
+        } else if (tool === 'deepseek') {
+          document.getElementById('deepseekBaseUrl').value = '';
+          document.getElementById('deepseekModel').value = '';
+        } else if (tool === 'qwen') {
+          document.getElementById('qwenBaseUrl').value = '';
+          document.getElementById('qwenModel').value = '';
+        }
+
+        await refreshCliConfigStatus();
+      } catch (e) {
+        showToast(`Failed to reset config: ` + e.message, "error");
+      }
+    }
+
+    function populateCliConfigDropdowns(d) {
+      if (!d) return;
+
+      let list = document.getElementById('cliModelList');
+      if (!list) {
+        list = document.createElement('datalist');
+        list.id = 'cliModelList';
+        document.body.appendChild(list);
+      }
+      list.innerHTML = '';
+
+      STANDARD_MODELS.forEach(m => {
+        const opt = document.createElement('option');
+        opt.value = m.id;
+        opt.textContent = m.name || m.id;
+        list.appendChild(opt);
+      });
+
+      if (d.model_aliases) {
+        Object.keys(d.model_aliases).forEach(alias => {
+          if (!STANDARD_MODELS.some(m => m.id === alias)) {
+            const opt = document.createElement('option');
+            opt.value = alias;
+            opt.textContent = `${alias} (Alias)`;
+            list.appendChild(opt);
+          }
+        });
+      }
+
+      const apiKeys = d.api_keys || [];
+      const keySelects = ['claudeApiKey', 'clineApiKey', 'deepseekApiKey', 'qwenApiKey'];
+      keySelects.forEach(selId => {
+        const sel = document.getElementById(selId);
+        if (sel) {
+          const prevVal = sel.value;
+          sel.innerHTML = '<option value="">No Auth Key (Open Gateway Mode)</option>';
+          apiKeys.forEach(k => {
+            const opt = document.createElement('option');
+            opt.value = k.value;
+            opt.textContent = `${k.name || 'API Key'} (${k.value})`;
+            sel.appendChild(opt);
+          });
+          if (prevVal) {
+            sel.value = prevVal;
+          }
+        }
       });
     }
   </script>
