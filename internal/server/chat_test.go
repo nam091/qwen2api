@@ -26,6 +26,10 @@ func newTestServer(t *testing.T, upstream *httptest.Server) http.Handler {
 		BaseURL:         upstream.URL,
 		CooldownSeconds: 60,
 		LogLevel:        "error",
+		Retry:           config.RetryConfig{MaxAttempts: 3},
+		Features: config.FeatureToggles{
+			APIKeyRotation: true,
+		},
 	}
 	client := qwen.NewClient(qwen.ClientConfig{
 		BaseURL:        upstream.URL,
@@ -390,6 +394,75 @@ func TestChatCompletionsNoToolsNoRegression(t *testing.T) {
 	}
 	if *resp.Choices[0].Message.Content != "Hello" {
 		t.Errorf("content = %q want Hello", *resp.Choices[0].Message.Content)
+	}
+}
+
+func fakeUpstreamTruncatedThenContinues(t *testing.T) *httptest.Server {
+	mux := http.NewServeMux()
+	var completionCount int
+	mux.HandleFunc("/api/v2/chats/new", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"id":"chat-tool"}}`))
+	})
+	mux.HandleFunc("/api/v2/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		completionCount++
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl, _ := w.(http.Flusher)
+		writeData := func(s string) {
+			fmt.Fprintf(w, "data: %s\n\n", s)
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		if completionCount == 1 {
+			writeData(`{"choices":[{"delta":{"role":"assistant","content":"<tool_call>\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"/foo.go\"}","phase":"answer"}}]}`)
+			writeData(`[DONE]`)
+			return
+		}
+		writeData(`{"choices":[{"delta":{"role":"assistant","content":"<tool_call>\n{\"name\": \"read_file\", \"arguments\": {\"path\": \"/foo.go\"}}\n</tool_call>","phase":"answer"}}]}`)
+		writeData(`[DONE]`)
+	})
+	return httptest.NewServer(mux)
+}
+
+func TestChatCompletionsNonStreamTruncatedToolCallAutoContinue(t *testing.T) {
+	upstream := fakeUpstreamTruncatedThenContinues(t)
+	defer upstream.Close()
+	h := newTestServer(t, upstream)
+
+	body := `{"model":"qwen3-max","stream":false,"messages":[{"role":"user","content":"read /foo.go"}],"tools":[{"type":"function","function":{"name":"read_file","description":"Read a file","parameters":{"type":"object","properties":{"path":{"type":"string"}}}}}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer sk-test")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	var resp openai.ChatCompletion
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("decode: %v body=%s", err, rec.Body.String())
+	}
+	if len(resp.Choices) != 1 {
+		t.Fatalf("choices = %d want 1", len(resp.Choices))
+	}
+	if resp.Choices[0].FinishReason != "tool_calls" {
+		t.Fatalf("finish_reason = %q want tool_calls", resp.Choices[0].FinishReason)
+	}
+	if len(resp.Choices[0].Message.ToolCalls) != 1 {
+		t.Fatalf("tool_calls = %d want 1", len(resp.Choices[0].Message.ToolCalls))
+	}
+	if resp.Choices[0].Message.ToolCalls[0].Function.Name != "read_file" {
+		t.Fatalf("tool_call name = %q want read_file", resp.Choices[0].Message.ToolCalls[0].Function.Name)
+	}
+}
+
+func TestIsTruncatedToolCallContent(t *testing.T) {
+	if !isTruncatedToolCallContent("<tool_call>\n{\"name\":\"x\"\n") {
+		t.Fatal("expected truncated content to be detected")
+	}
+	if isTruncatedToolCallContent("<tool_call>\n{\"name\":\"x\"}\n</tool_call>") {
+		t.Fatal("did not expect complete tool_call to be detected as truncated")
 	}
 }
 

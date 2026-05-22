@@ -30,7 +30,7 @@ func (h *handlers) ready(w http.ResponseWriter, _ *http.Request) {
 // authMiddleware enforces the configured client API keys when any are set.
 func (h *handlers) authMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if len(h.deps.Config.APIKeys) == 0 {
+		if !h.deps.Config.Features.APIKeyRotation || len(h.deps.Config.APIKeys) == 0 {
 			next.ServeHTTP(w, r)
 			return
 		}

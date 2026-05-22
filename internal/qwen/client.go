@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/keaume34/qwen2api/internal/browserengine"
 	"github.com/keaume34/qwen2api/internal/config"
 )
 
@@ -31,6 +32,8 @@ type ClientConfig struct {
 	MaxIdleConnsPerHost int
 	// IdleConnTimeoutSeconds is how long an idle connection stays in the pool.
 	IdleConnTimeoutSeconds int
+	// BrowserFallbackEnabled enables fallback to browser engine on anti-bot blocks.
+	BrowserFallbackEnabled bool
 }
 
 // Client talks to chat.qwen.ai.
@@ -39,6 +42,7 @@ type Client struct {
 	http      *http.Client
 	stream    *http.Client
 	configRef *config.Config
+	browser   *browserengine.HybridEngine
 }
 
 // NewClient constructs a Client with sensible defaults.
@@ -82,10 +86,16 @@ func NewClient(cfg ClientConfig) *Client {
 		streamClient.Transport = transport
 	}
 
+	var browser *browserengine.HybridEngine
+	if cfg.BrowserFallbackEnabled {
+		browser = browserengine.NewHybridEngine(httpClient, nil, nil, browserengine.HTTPFirst)
+	}
+
 	return &Client{
-		cfg:    cfg,
-		http:   httpClient,
-		stream: streamClient,
+		cfg:     cfg,
+		http:    httpClient,
+		stream:  streamClient,
+		browser: browser,
 	}
 }
 
@@ -145,7 +155,7 @@ func (c *Client) Models(ctx context.Context, token string) (*ModelsResponse, err
 	}
 	c.applyHeaders(req, token)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.doWithFallback(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -189,7 +199,7 @@ func (c *Client) NewChat(ctx context.Context, token, model, chatType string) (st
 	}
 	c.applyHeaders(req, token)
 
-	resp, err := c.http.Do(req)
+	resp, err := c.doWithFallback(ctx, req)
 	if err != nil {
 		return "", err
 	}
@@ -237,7 +247,7 @@ func (c *Client) Completions(ctx context.Context, token string, req CompletionRe
 	c.applyHeaders(httpReq, token)
 	httpReq.Header.Set("Accept", "text/event-stream")
 
-	resp, err := c.stream.Do(httpReq)
+	resp, err := c.doStreamWithFallback(ctx, httpReq)
 	if err != nil {
 		return nil, err
 	}
@@ -261,4 +271,62 @@ func (e *UpstreamError) Error() string {
 		body = body[:256] + "..."
 	}
 	return fmt.Sprintf("upstream %d: %s", e.Status, body)
+}
+
+func isAntiBotResponse(resp *http.Response, body string) bool {
+	if resp == nil {
+		return false
+	}
+	switch resp.StatusCode {
+	case http.StatusForbidden, http.StatusTooManyRequests:
+		return true
+	case 503:
+		ct := resp.Header.Get("Content-Type")
+		if strings.Contains(ct, "text/html") {
+			return true
+		}
+	}
+	if body != "" {
+		lower := strings.ToLower(body)
+		if strings.Contains(lower, "challenge") || strings.Contains(lower, "captcha") ||
+			strings.Contains(lower, "cloudflare") || strings.Contains(lower, "verify") {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *Client) doWithFallback(ctx context.Context, req *http.Request) (*http.Response, error) {
+	return c.doWithFallbackClient(ctx, req, c.http)
+}
+
+func (c *Client) doStreamWithFallback(ctx context.Context, req *http.Request) (*http.Response, error) {
+	return c.doWithFallbackClient(ctx, req, c.stream)
+}
+
+func (c *Client) doWithFallbackClient(ctx context.Context, req *http.Request, client *http.Client) (*http.Response, error) {
+	fallbackEnabled := c.cfg.BrowserFallbackEnabled
+	if c.configRef != nil {
+		fallbackEnabled = c.configRef.Features.BrowserEngineFallback
+	}
+
+	resp, err := client.Do(req)
+	if err != nil || !fallbackEnabled || c.browser == nil {
+		return resp, err
+	}
+
+	bodyBytes, _ := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	bodyStr := string(bodyBytes)
+
+	if isAntiBotResponse(resp, bodyStr) {
+		resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+		browserResp, browserErr := c.browser.Do(ctx, req)
+		if browserErr == nil {
+			return browserResp, nil
+		}
+	}
+
+	resp.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+	return resp, err
 }

@@ -428,3 +428,15 @@ func (h *handlers) testModel(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"status": "live", "latency_ms": latency, "chat_id": chatId})
 }
+
+func (h *handlers) shutdownServer(w http.ResponseWriter, r *http.Request) {
+	writeJSON(w, http.StatusOK, map[string]any{"status": "shutting_down", "message": "Gateway server is shutting down gracefully."})
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	go func() {
+		time.Sleep(500 * time.Millisecond)
+		os.Exit(0)
+	}()
+}
+

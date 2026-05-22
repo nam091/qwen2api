@@ -42,6 +42,7 @@ type FeatureToggles struct {
 	FileCache              bool `json:"file_cache"`
 	TopicIsolation         bool `json:"topic_isolation"`
 	Tunnel                 bool `json:"tunnel"`
+	BrowserEngineFallback  bool `json:"browser_engine_fallback"`
 }
 
 // CacheConfig configures the prompt cache.
@@ -119,13 +120,14 @@ func Default() Config {
 			Embeddings:             false,
 			ConversationContinuity: false,
 			APIKeyRotation:         false,
+			BrowserEngineFallback:  false,
 		},
 		Cache: CacheConfig{
 			MaxEntries: 256,
 			TTLSeconds: 300,
 		},
 		Retry: RetryConfig{
-			MaxAttempts: 3,
+			MaxAttempts: 10,
 		},
 		Logging: LoggingConfig{
 			Path:        "qwen2api.log",

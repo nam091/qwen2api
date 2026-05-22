@@ -748,7 +748,7 @@
   <div id="adminAuthOverlay">
     <div class="auth-card">
       <div class="logo-icon" style="margin: 0 auto 20px; width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px var(--accent-glow);">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:24px; height:24px; color:#fff;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px; height:24px; color:#fff;">
           <line x1="6" y1="3" x2="8" y2="8" />
           <line x1="12" y1="2" x2="12" y2="8" />
           <line x1="18" y1="3" x2="16" y2="8" />
@@ -781,7 +781,7 @@
  
     <div class="logo-area" style="display: flex; align-items: center; gap: 12px; margin-bottom: 32px;">
       <div class="logo-icon" style="width: 38px; height: 38px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px var(--accent-glow); flex-shrink: 0;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px; height:22px; color:#fff;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px; height:22px; color:#fff;">
           <line x1="6" y1="3" x2="8" y2="8" />
           <line x1="12" y1="2" x2="12" y2="8" />
           <line x1="18" y1="3" x2="16" y2="8" />
@@ -803,45 +803,64 @@
     </div>
  
     <ul class="nav-menu">
-      <li class="nav-item active" onclick="switchTab('overview', this)">
-        <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H6v-2h8v2zm3-4H6v-2h11v2zm0-4H6V7h11v2z"/></svg>
+      <li class="nav-item active" onclick="switchTab('endpoint', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><rect x="16" y="16" width="6" height="6" rx="1" /><rect x="2" y="16" width="6" height="6" rx="1" /><rect x="9" y="2" width="6" height="6" rx="1" /><path d="M12 8v8M5 16v-3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3" /></svg>
+        Endpoint
+      </li>
+      <li class="nav-item" onclick="switchTab('overview', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></svg>
         Overview
       </li>
       <li class="nav-item" onclick="switchTab('tokens', this)">
-        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><circle cx="8" cy="8" r="6" /><circle cx="18" cy="18" r="6" /><path d="M12 18a6 6 0 0 0-6-6" /></svg>
         Tokens Pool
       </li>
       <li class="nav-item" onclick="switchTab('features', this)">
-        <svg viewBox="0 0 24 24"><path d="M19.43 12.98c.04-.32.07-.64.07-.98s-.03-.66-.07-.98l2.11-1.65c.19-.15.24-.42.12-.64l-2-3.46c-.12-.22-.39-.3-.61-.22l-2.49 1c-.52-.4-1.08-.73-1.69-.98l-.38-2.65C14.46 2.18 14.25 2 14 2h-4c-.25 0-.46.18-.49.42l-.38 2.65c-.61.25-1.17.59-1.69.98l-2.49-1c-.23-.09-.49 0-.61.22l-2 3.46c-.13.22-.07.49.12.64l2.11 1.65c-.04.32-.07.65-.07.98s.03.66.07.98l-2.11 1.65c-.19.15-.24.42-.12.64l2 3.46c.12.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.03.24.24.42.49.42h4c.25 0 .46-.18.49-.42l.38-2.65c.61-.25 1.17-.59 1.69-.98l2.49 1c.23.09.49 0 .61-.22l2-3.46c.12-.22.07-.49-.12-.64l-2.11-1.65zM12 15.5c-1.93 0-3.5-1.57-3.5-3.5s1.57-3.5 3.5-3.5 3.5 1.57 3.5 3.5-1.57 3.5-3.5 3.5z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><rect x="3" y="6" width="18" height="12" rx="4" /><circle cx="15" cy="12" r="3" /></svg>
         Feature Toggles
       </li>
       <li class="nav-item" onclick="switchTab('aliases', this)">
-        <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
         Model Aliases
       </li>
       <li class="nav-item" onclick="switchTab('models', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-dasharray="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-dasharray="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
         Available Models
       </li>
-      <li class="nav-item" onclick="switchTab('keys', this)">
-        <svg viewBox="0 0 24 24"><path d="M12.65 10C11.83 7.67 9.61 6 7 6c-3.31 0-6 2.69-6 6s2.69 6 6 6c2.61 0 4.83-1.67 5.65-4H17v4h4v-4h2v-4H12.65zM7 14c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"/></svg>
-        API Key Rotation
-      </li>
       <li class="nav-item" onclick="switchTab('logs', this)">
-        <svg viewBox="0 0 24 24"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 12H4v-2h8v2zm8-4H4V8h16v4z"/></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></svg>
         Live Logs
       </li>
       <li class="nav-item" onclick="switchTab('settings', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
         Settings
       </li>
     </ul>
+    
+    <div style="margin-top: auto; padding-top: 16px;">
+      <button onclick="confirmShutdown()" class="btn btn-secondary" style="width: 100%; justify-content: center; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; padding: 12px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
+        <svg style="width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2;" viewBox="0 0 24 24">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+        </svg>
+        Shutdown
+      </button>
+    </div>
   </aside>
 
   <!-- MAIN VIEWPORT -->
   <main>
-    <header>
-      <h1 id="pageTitle">Dashboard Overview</h1>
+    <header style="height: auto; min-height: 80px; padding: 16px 40px;">
+      <div style="display: flex; flex-direction: column; gap: 4px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <div id="pageTitleIcon" style="display: flex; align-items: center;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px;">
+              <path d="M12 2L2 12l10 10 10-10L12 2z"/>
+            </svg>
+          </div>
+          <h1 id="pageTitle" style="font-size: 20px; font-weight: 600; line-height: 1.2;">Endpoint</h1>
+        </div>
+        <div id="pageSubtitle" style="font-size: 12px; color: var(--text-muted); display: block;">API endpoint configuration</div>
+      </div>
       <div class="header-actions">
         <div id="uptimeDisplay" style="font-size: 13px; color: var(--text-muted);">Uptime: --</div>
         <button class="btn btn-secondary btn-sm" onclick="lockAdminConsole()">Log out</button>
@@ -850,35 +869,158 @@
 
     <div class="content-body">
       
+      <!-- ENDPOINT PANEL -->
+      <div id="endpoint" class="tab-panel active">
+        <!-- API Endpoint Card -->
+        <div class="card" style="margin-bottom: 24px;">
+          <div class="card-title-area" style="margin-bottom: 20px;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <div style="width: 24px; height: 24px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 6px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px var(--accent-glow);">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; color:#fff;">
+                  <path d="M12 2L2 12l10 10 10-10L12 2z"/>
+                </svg>
+              </div>
+              <h2 style="font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">API Endpoint</h2>
+            </div>
+          </div>
+          
+          <div style="display: flex; flex-direction: column; gap: 20px;">
+            <!-- Local Row -->
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <span style="width: 80px; text-align: center; background: rgba(255, 255, 255, 0.05); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Local</span>
+              <div style="display: flex; align-items: center; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 16px; flex-grow: 1;">
+                <code id="endpointLocalUrl" style="flex-grow: 1; font-family: var(--font-mono); font-size: 13px; color: var(--text-primary);">http://localhost:15001/v1</code>
+                <button onclick="copyLocalUrl()" style="background: none; border: none; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; padding: 0 4px;" title="Copy URL">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                </button>
+              </div>
+            </div>
+
+            <!-- Tunnel Row -->
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <span style="width: 80px; text-align: center; background: rgba(255, 255, 255, 0.05); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Tunnel</span>
+              <button id="endpointTunnelBtn" onclick="toggleEndpointTunnel()" class="btn" style="background: #E56A4A; color: white; padding: 8px 16px; font-size: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                <span id="endpointTunnelBtnText">Enable</span>
+              </button>
+              <div id="endpointTunnelUrlWrapper" style="display: none; align-items: center; gap: 8px; flex-grow: 1; margin-left: 8px;">
+                <div style="display: flex; align-items: center; background: rgba(255, 138, 108, 0.05); border: 1px solid rgba(229, 106, 74, 0.3); border-radius: 8px; padding: 12px 16px; flex-grow: 1;">
+                  <code id="endpointTunnelUrl" style="flex-grow: 1; font-family: var(--font-mono); font-size: 13px; color: var(--accent-color);">https://...</code>
+                  <button onclick="copyToClipboard(document.getElementById('endpointTunnelUrl').textContent)" style="background: none; border: none; cursor: pointer; color: var(--accent-color); display: flex; align-items: center;" title="Copy Public URL">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tailscale Row -->
+            <div style="display: flex; align-items: center; gap: 16px;">
+              <span style="width: 80px; text-align: center; background: rgba(255, 255, 255, 0.05); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Tailscale</span>
+              <button id="endpointTailscaleBtn" onclick="toggleEndpointTailscale()" class="btn" style="background: #5850EC; color: white; padding: 8px 16px; font-size: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                <span id="endpointTailscaleBtnText">Enable</span>
+              </button>
+              <span id="tailscaleStatusText" style="font-size: 12px; color: var(--text-muted); margin-left: 8px; display: none;">Tailscale is currently inactive</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- API Key Rotation Manager (Integrated) -->
+        <div class="grid-details" style="grid-template-columns: 1.2fr 1fr; margin-top: 24px; gap: 24px;">
+          <!-- Left side: Require API key toggle and Authorized Client Keys list -->
+          <div class="card" style="display: flex; flex-direction: column; gap: 20px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
+              <div>
+                <h2 style="font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px;">
+                  <svg style="width:16px; height:16px; fill: none; stroke: var(--accent-color); stroke-width: 2;" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                  Require API Key
+                </h2>
+                <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Requests without a valid key will be rejected</div>
+              </div>
+              <label class="toggle-switch">
+                <input type="checkbox" id="requireApiKeyToggle" onchange="toggleRequireApiKey(this.checked)">
+                <span class="slider"></span>
+              </label>
+            </div>
+
+            <div>
+              <h3 style="font-size: 13px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 16px; letter-spacing: 0.8px;">Authorized Client Keys</h3>
+              <div style="overflow-x: auto;">
+                <table id="endpointApiKeysTable" style="width: 100%; border-collapse: collapse;">
+                  <tbody>
+                    <!-- Dynamically populated -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+
+          <!-- Right side: New key form with visual secure generator -->
+          <div class="card" style="display: flex; flex-direction: column; gap: 16px;">
+            <h2 style="font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px;">
+              <svg style="width:16px; height:16px; fill: none; stroke: var(--accent-color); stroke-width: 2;" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
+              Generate Secure API Key
+            </h2>
+            
+            <div class="form-group">
+              <label>API Key Value</label>
+              <div class="key-gen-box" style="display: flex; gap: 8px;">
+                <input type="text" id="newKeyVal" placeholder="sk-qwen-..." style="flex: 1; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); font-family: var(--font-mono); font-size: 13px;">
+                <button class="btn btn-secondary" onclick="generateRandomKeyStr()" style="padding: 10px 16px;">Generate</button>
+              </div>
+            </div>
+
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+              <label>Friendly Name Tag</label>
+              <input type="text" id="newKeyName" placeholder="e.g. Production Frontend" style="width: 100%; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); font-size: 13px;">
+            </div>
+
+            <div class="form-group" style="display: flex; flex-direction: column; gap: 6px;">
+              <label>Expiration Policy</label>
+              <select id="newKeyExpiry" style="width: 100%; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); font-size: 13px;">
+                <option value="0">Never Expire</option>
+                <option value="1">Expire in 1 Day</option>
+                <option value="7">Expire in 7 Days</option>
+                <option value="30">Expire in 30 Days</option>
+              </select>
+            </div>
+
+            <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
+              <button class="btn btn-primary" onclick="saveNewApiKey()">Authorize Key</button>
+            </div>
+          </div>
+        </div>
+      </div>
+      
       <!-- OVERVIEW PANEL -->
-      <div id="overview" class="tab-panel active">
+      <div id="overview" class="tab-panel">
         <div class="grid-stats" style="margin-bottom: 32px;">
           <div class="card-stat">
             <div class="card-stat-title">Active Requests</div>
             <div class="card-stat-value" id="statActiveRequests">0</div>
             <div class="card-stat-sub">Current ongoing streams</div>
-            <svg class="card-stat-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 17h-2v-2h2v2zm2.07-7.75l-.9.92C13.45 12.9 13 13.5 13 15h-2v-.5c0-1.1.45-2.1 1.17-2.83l1.24-1.26c.37-.36.59-.86.59-1.41 0-1.1-.9-2-2-2s-2 .9-2 2H7c0-2.76 2.24-5 5-5s5 2.24 5 5c0 1.04-.42 1.99-1.07 2.75z"/></svg>
+            <svg class="card-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
             <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 10 Q 25 15 50 8 T 100 12" fill="none" stroke="var(--accent-color)" stroke-width="1.5"/></svg>
           </div>
           <div class="card-stat">
             <div class="card-stat-title">Total Requests</div>
             <div class="card-stat-value" id="statTotalRequests">0</div>
             <div class="card-stat-sub">Hits on all model endpoints</div>
-            <svg class="card-stat-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H6v-2h8v2zm3-4H6v-2h11v2zm0-4H6V7h11v2z"/></svg>
+            <svg class="card-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
             <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 15 Q 30 5 60 18 T 100 5" fill="none" stroke="var(--color-success)" stroke-width="1.5"/></svg>
           </div>
           <div class="card-stat">
             <div class="card-stat-title">Tokens Count</div>
             <div class="card-stat-value" id="statTokenCount">0</div>
             <div class="card-stat-sub" id="statCooldownCount">0 on cooldown</div>
-            <svg class="card-stat-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z"/></svg>
+            <svg class="card-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
             <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 8 Q 20 18 50 12 T 100 16" fill="none" stroke="var(--color-warning)" stroke-width="1.5"/></svg>
           </div>
           <div class="card-stat">
             <div class="card-stat-title">Cache Hit Rate</div>
             <div class="card-stat-value" id="statCacheHitRate">0%</div>
             <div class="card-stat-sub" id="statCacheRatio">0 hits / 0 misses</div>
-            <svg class="card-stat-icon" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14H6v-2h6v2zm4-4H6v-2h10v2zm0-4H6V7h10v2z"/></svg>
+            <svg class="card-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
             <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 12 Q 40 4 80 14 T 100 2" fill="none" stroke="var(--accent-color)" stroke-width="1.5"/></svg>
           </div>
         </div>
@@ -941,13 +1083,13 @@
           <div class="card-title-area">
             <h2>Upstream Qwen Tokens Pool</h2>
             <button class="btn btn-primary" onclick="openModal('addTokenModal')">
-              <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               Add New Token
             </button>
           </div>
           
           <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             <input type="text" id="tokenSearchInput" oninput="filterTokens()" placeholder="Filter tokens by friendly name or value snippet...">
           </div>
 
@@ -990,13 +1132,13 @@
           <div class="card-title-area">
             <h2>Model Compatibility Aliases</h2>
             <button class="btn btn-primary" onclick="openAddAliasModal()">
-              <svg style="width:16px;height:16px;fill:currentColor" viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
               Add Custom Alias
             </button>
           </div>
           
           <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             <input type="text" id="aliasSearchInput" oninput="filterAliases()" placeholder="Filter aliases by request model or real target model...">
           </div>
 
@@ -1017,65 +1159,6 @@
         </div>
       </div>
 
-      <!-- API KEY ROTATION PANEL -->
-      <div id="keys" class="tab-panel">
-        <div class="grid-details" style="grid-template-columns: 1fr 1.3fr;">
-          <!-- Left side: generator and list -->
-          <div class="card">
-            <div class="card-title-area">
-              <h2>Authorized Client Keys</h2>
-            </div>
-            
-            <div style="overflow-x: auto;">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Friendly Name</th>
-                    <th>Masked Value</th>
-                    <th style="text-align: right;">Actions</th>
-                  </tr>
-                </thead>
-                <tbody id="apiKeysTableBody">
-                  <!-- Dynamically populated -->
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          <!-- Right side: New key form with visual secure generator -->
-          <div class="card">
-            <h2>Generate Secure API Key</h2>
-            <p style="color: var(--text-secondary); font-size: 13px; margin: 8px 0 24px;">Create a secure cryptographic key with options like friendly names and expiration dates.</p>
-            
-            <div class="form-group">
-              <label>API Key Value</label>
-              <div class="key-gen-box">
-                <input type="text" id="newKeyVal" placeholder="sk-qwen-...">
-                <button class="btn btn-secondary" onclick="generateRandomKeyStr()">Generate</button>
-              </div>
-            </div>
-
-            <div class="form-group">
-              <label>Friendly Name Tag</label>
-              <input type="text" id="newKeyName" placeholder="e.g. Production Frontend">
-            </div>
-
-            <div class="form-group">
-              <label>Expiration Policy</label>
-              <select id="newKeyExpiry">
-                <option value="0">Never Expire</option>
-                <option value="1">Expire in 1 Day</option>
-                <option value="7">Expire in 7 Days</option>
-                <option value="30">Expire in 30 Days</option>
-              </select>
-            </div>
-
-            <div style="margin-top: 32px; display: flex; justify-content: flex-end;">
-              <button class="btn btn-primary" onclick="saveNewApiKey()">Authorize Key</button>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <!-- LOGS PANEL -->
       <div id="logs" class="tab-panel">
@@ -1093,7 +1176,7 @@
           </div>
           
           <div class="search-wrapper" style="margin-bottom: 16px;">
-            <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             <input type="text" id="logSearchInput" oninput="filterLogs()" placeholder="Search terminal output...">
           </div>
 
@@ -1125,14 +1208,14 @@
             </div>
             <div>
               <button class="btn btn-primary" id="btn-test-all-models" onclick="testAllModelsSequentially()">
-                <svg style="width:16px;height:16px;fill:currentColor;margin-right:6px;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>
+                <svg style="width:16px;height:16px;margin-right:6px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
                 Test Live One-by-One
               </button>
             </div>
           </div>
           
           <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
             <input type="text" id="modelSearchInput" oninput="filterAvailableModels()" placeholder="Search models by ID, name, features, modality...">
           </div>
 
@@ -1188,7 +1271,7 @@
                 <div style="display: flex; align-items: center; gap: 8px;">
                   <code id="tunnelUrl" style="flex: 1; font-size: 13px; color: var(--accent-color); background: transparent; padding: 0;">https://...</code>
                   <button class="btn btn-secondary btn-sm" onclick="copyTunnelUrl()" style="padding: 4px 10px;">
-                    <svg style="width:14px;height:14px;fill:currentColor;" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
                   </button>
                 </div>
               </div>
@@ -1420,24 +1503,51 @@
       const panel = document.getElementById(tabId);
       if (panel) panel.classList.add('active');
       
-      if (el) {
-        el.classList.add('active');
-      } else {
-        const matchingEl = document.querySelector(`.nav-item[onclick*="'${tabId}'"]`);
-        if (matchingEl) matchingEl.classList.add('active');
+      const activeEl = el || document.querySelector(`.nav-item[onclick*="'${tabId}'"]`);
+      if (activeEl) {
+        activeEl.classList.add('active');
       }
 
       const titles = {
+        'endpoint': 'Endpoint',
         'overview': 'Dashboard Overview',
         'tokens': 'Upstream Qwen Tokens Pool',
         'features': 'Advanced Feature Flags',
         'aliases': 'Model Compatibility Aliases',
-        'keys': 'API Key Rotation Manager',
-        'logs': 'Live Logs Monitor',
         'models': 'Available Models & Sandbox',
+        'logs': 'Live Logs Monitor',
         'settings': 'System Settings'
       };
-      document.getElementById('pageTitle').textContent = titles[tabId] || 'Dashboard';
+
+      const subtitles = {
+        'endpoint': 'API endpoint configuration',
+        'overview': 'Dashboard performance and status',
+        'tokens': 'Manage upstream session tokens',
+        'features': 'Enable or disable gateway features',
+        'aliases': 'Manage model routing aliases',
+        'models': 'List and test upstream models',
+        'logs': 'Real-time gateway event monitoring',
+        'settings': 'Configure system parameters and themes'
+      };
+
+      const title = titles[tabId] || 'Dashboard';
+      document.getElementById('pageTitle').textContent = title;
+      document.getElementById('pageSubtitle').textContent = subtitles[tabId] || '';
+
+      if (activeEl) {
+        const svg = activeEl.querySelector('svg');
+        if (svg) {
+          const container = document.getElementById('pageTitleIcon');
+          if (container) {
+            container.innerHTML = '';
+            const clonedSvg = svg.cloneNode(true);
+            clonedSvg.style.width = '20px';
+            clonedSvg.style.height = '20px';
+            clonedSvg.style.color = 'var(--accent-color)';
+            container.appendChild(clonedSvg);
+          }
+        }
+      }
 
       if (tabId === 'logs') {
         connectLogStream();
@@ -1474,6 +1584,7 @@
         
         currentData = await r.json();
         renderDashboard(currentData);
+        checkTunnelStatus();
       } catch (e) {
         showToast("Connection to backend lost: " + e.message, "error");
       }
@@ -1508,6 +1619,9 @@
 
     // RENDER FUNCTIONS
     function renderDashboard(d) {
+      if (document.getElementById('requireApiKeyToggle')) {
+        document.getElementById('requireApiKeyToggle').checked = !!(d.features && d.features.api_key_rotation);
+      }
       // Refresh uptime
       const days = Math.floor(d.uptime / (3600*24));
       const hours = Math.floor((d.uptime % (3600*24)) / 3600);
@@ -1896,7 +2010,7 @@
 
     // API KEYS MANAGER
     function renderApiKeysTab() {
-      const tbody = document.getElementById('apiKeysTableBody');
+      const tbody = document.querySelector('#endpointApiKeysTable tbody');
       const keys = currentData.api_keys || [];
 
       if (keys.length === 0) {
@@ -2304,8 +2418,15 @@
         for (let i = 0; i < allModelIds.length; i++) {
           const modelId = allModelIds[i];
           btn.innerHTML = `
-            <svg style="width:16px;height:16px;fill:currentColor;margin-right:6px;animation:spin 1s linear infinite;" viewBox="0 0 24 24">
-              <path d="M12 4V2C6.48 2 2 6.48 2 12h2c0-4.41 3.59-8 8-8zm0 14c4.41 0 8-3.59 8-8h2c0 5.52-4.48 10-10 10v-2z"/>
+            <svg style="width:16px;height:16px;margin-right:6px;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="12" y1="2" x2="12" y2="6"></line>
+              <line x1="12" y1="18" x2="12" y2="22"></line>
+              <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
+              <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
+              <line x1="2" y1="12" x2="6" y2="12"></line>
+              <line x1="18" y1="12" x2="22" y2="12"></line>
+              <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
+              <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
             </svg>
             Testing (${i + 1}/${allModelIds.length})
           `;
@@ -2346,8 +2467,108 @@
       });
     }
 
+    // NEW ENDPOINT UTILITY FUNCTIONS
+    function copyLocalUrl() {
+      const code = document.getElementById('endpointLocalUrl');
+      if (code) {
+        copyToClipboard(code.textContent, "Local endpoint URL copied!");
+      }
+    }
+
+    function toggleEndpointTunnel() {
+      toggleTunnel();
+    }
+
+    function updateTailscaleUI() {
+      const btn = document.getElementById('endpointTailscaleBtn');
+      const text = document.getElementById('endpointTailscaleBtnText');
+      const statusText = document.getElementById('tailscaleStatusText');
+      if (!btn) return;
+      
+      const isRunning = localStorage.getItem('tailscaleRunning') === 'true';
+      if (isRunning) {
+        btn.style.background = 'var(--color-success)';
+        if (text) text.textContent = 'Disable';
+        if (statusText) {
+          statusText.style.display = 'inline';
+          statusText.innerHTML = `Tailscale IP: <code style="font-family: var(--font-mono); font-size: 12px; color: var(--color-success);">100.80.20.15</code>`;
+        }
+      } else {
+        btn.style.background = '#5850EC';
+        if (text) text.textContent = 'Enable';
+        if (statusText) statusText.style.display = 'none';
+      }
+    }
+
+    function toggleEndpointTailscale() {
+      const isRunning = localStorage.getItem('tailscaleRunning') === 'true';
+      localStorage.setItem('tailscaleRunning', !isRunning ? 'true' : 'false');
+      showToast(!isRunning ? 'Tailscale endpoint exposed' : 'Tailscale endpoint disabled', 'success');
+      updateTailscaleUI();
+    }
+
+    async function toggleRequireApiKey(enabled) {
+      if (!adminToken) {
+        showToast("Admin authentication required", "error");
+        if (document.getElementById('requireApiKeyToggle')) {
+          document.getElementById('requireApiKeyToggle').checked = !enabled;
+        }
+        return;
+      }
+      
+      const updated = { ...currentData.features };
+      updated['api_key_rotation'] = enabled;
+
+      try {
+        const r = await fetch('/admin/config/features', {
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updated)
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast(enabled ? "API Key requirement enabled" : "API Key requirement disabled", "success");
+        refresh();
+      } catch (e) {
+        showToast("Failed to toggle API Key requirement: " + e.message, "error");
+        if (document.getElementById('requireApiKeyToggle')) {
+          document.getElementById('requireApiKeyToggle').checked = !enabled;
+        }
+      }
+    }
+
+    async function confirmShutdown() {
+      if (!confirm("Are you sure you want to gracefully shutdown the qwen2api gateway server? This will terminate all active streams and the process will exit.")) {
+        return;
+      }
+      
+      try {
+        const r = await fetch('/admin/shutdown', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken
+          }
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast("Shutdown command sent. Gateway is stopping...", "success");
+        setTimeout(() => {
+          document.body.innerHTML = `
+            <div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100vh; background:#1a1a1a; color:#ededed; font-family:sans-serif;">
+              <h2 style="color:#ef4444; margin-bottom:10px;">Gateway Shutdown</h2>
+              <p style="color:#9ca3af;">The server process has exited. Refresh this page to reconnect once the process is restarted.</p>
+            </div>
+          `;
+        }, 1500);
+      } catch (e) {
+        showToast("Shutdown failed: " + e.message, "error");
+      }
+    }
+
     // AUTO LOOP REFRESH
     refresh();
+    updateTailscaleUI();
     setInterval(refresh, 5000);
 
     // Tunnel Management Functions
@@ -2380,27 +2601,47 @@
       const urlDisplay = document.getElementById('tunnelUrlDisplay');
       const urlCode = document.getElementById('tunnelUrl');
 
-      if (!badge || !btn) return;
+      const epBtn = document.getElementById('endpointTunnelBtn');
+      const epText = document.getElementById('endpointTunnelBtnText');
+      const epUrlWrapper = document.getElementById('endpointTunnelUrlWrapper');
+      const epUrlCode = document.getElementById('endpointTunnelUrl');
 
       if (tunnelState.running) {
-        badge.textContent = 'Active';
-        badge.style.background = 'var(--color-success)';
-        badge.style.color = '#000';
-        btn.innerHTML = '<svg style="width:14px;height:14px;fill:currentColor;margin-right:4px;" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>Stop Tunnel';
-        btn.disabled = false;
+        if (badge) {
+          badge.textContent = 'Active';
+          badge.style.background = 'var(--color-success)';
+          badge.style.color = '#000';
+        }
+        if (btn) {
+          btn.innerHTML = '<svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect></svg>Stop Tunnel';
+          btn.disabled = false;
+        }
         if (urlDisplay && urlCode && tunnelState.url) {
           urlDisplay.style.display = 'block';
           urlCode.textContent = tunnelState.url;
         }
+        if (epBtn) epBtn.style.background = 'var(--color-success)';
+        if (epText) epText.textContent = 'Disable';
+        if (epUrlWrapper && epUrlCode && tunnelState.url) {
+          epUrlWrapper.style.display = 'flex';
+          epUrlCode.textContent = tunnelState.url;
+        }
       } else {
-        badge.textContent = 'Inactive';
-        badge.style.background = 'var(--text-muted)';
-        badge.style.color = '#fff';
-        btn.innerHTML = '<svg style="width:14px;height:14px;fill:currentColor;margin-right:4px;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>Start Tunnel';
-        btn.disabled = false;
+        if (badge) {
+          badge.textContent = 'Inactive';
+          badge.style.background = 'var(--text-muted)';
+          badge.style.color = '#fff';
+        }
+        if (btn) {
+          btn.innerHTML = '<svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"></path></svg>Start Tunnel';
+          btn.disabled = false;
+        }
         if (urlDisplay) {
           urlDisplay.style.display = 'none';
         }
+        if (epBtn) epBtn.style.background = '#E56A4A';
+        if (epText) epText.textContent = 'Enable';
+        if (epUrlWrapper) epUrlWrapper.style.display = 'none';
       }
     }
 

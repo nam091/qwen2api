@@ -59,6 +59,10 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	if h.deps.Config.Features.RetryOnTokenFailure && h.deps.Config.Retry.MaxAttempts > 1 {
 		maxAttempts = h.deps.Config.Retry.MaxAttempts
 	}
+	continuationAttempts := 1
+	if h.deps.Config.Retry.MaxAttempts > 1 {
+		continuationAttempts = h.deps.Config.Retry.MaxAttempts
+	}
 
 	var (
 		token      config.Token
@@ -197,18 +201,52 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, errors.New(msg))
 		return
 	}
-	defer func() {
-		_ = body.Close()
-	}()
-
 	completionID := "chatcmpl-" + uuid.NewString()
 	created := unixNow()
 	hasTools := len(req.Tools) > 0
 	if req.Stream {
+		defer func() {
+			_ = body.Close()
+		}()
 		h.proxyStream(w, body, completionID, created, req.Model, hasTools)
-	} else {
-		h.aggregateStream(w, body, completionID, created, req.Model, hasTools)
+		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
+		h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
+		return
 	}
+
+	resp, fullContent, truncated, err := h.collectChatCompletion(body, completionID, created, req.Model, hasTools)
+	if err != nil {
+		h.handleUpstreamFailure(w, token.Value, err, "read completion stream")
+		h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, err)
+		return
+	}
+	if hasTools && truncated {
+		for attempt := 2; attempt <= continuationAttempts && truncated; attempt++ {
+			retries++
+			contReq := buildContinuationRequest(req, fullContent)
+			contUpstreamReq := buildQwenRequestWithOptions(contReq, h.deps.Config.Features.Multimodal)
+			contUpstreamReq.ChatID = upstreamReq.ChatID
+			contBody, contErr := h.deps.Qwen.Completions(r.Context(), token.Value, contUpstreamReq)
+			if contErr != nil {
+				h.handleUpstreamFailure(w, token.Value, contErr, "open continuation stream")
+				h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, contErr)
+				return
+			}
+			resp, fullContent, truncated, err = h.collectChatCompletion(contBody, completionID, created, req.Model, hasTools)
+			if err != nil {
+				h.handleUpstreamFailure(w, token.Value, err, "read continuation stream")
+				h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, err)
+				return
+			}
+		}
+		if truncated {
+			writeError(w, http.StatusBadGateway, "upstream_error", "tool call response appears truncated after retries")
+			h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, errors.New("truncated tool call after retries"))
+			return
+		}
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 	h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 	h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
 }
@@ -456,6 +494,118 @@ func truncate(s string, n int) string {
 }
 
 func strPtr(s string) *string { return &s }
+
+func jsonStringRaw(s string) json.RawMessage {
+	b, _ := json.Marshal(s)
+	return b
+}
+
+func buildContinuationRequest(req openai.ChatRequest, partialAssistant string) openai.ChatRequest {
+	out := req
+	out.Messages = append([]openai.ChatMessage{}, req.Messages...)
+	if strings.TrimSpace(partialAssistant) != "" {
+		out.Messages = append(out.Messages, openai.ChatMessage{
+			Role:    "assistant",
+			Content: jsonStringRaw(partialAssistant),
+		})
+	}
+	out.Messages = append(out.Messages, openai.ChatMessage{
+		Role:    "user",
+		Content: jsonStringRaw("Continue from exactly where you stopped. If you were emitting a <tool_call>, output only the completed <tool_call> block(s)."),
+	})
+	return out
+}
+
+func isTruncatedToolCallContent(content string) bool {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return false
+	}
+	if strings.Contains(trimmed, "<tool_call") && !strings.Contains(trimmed, "</tool_call>") {
+		return true
+	}
+	if strings.HasSuffix(trimmed, "<tool_call") || strings.HasSuffix(trimmed, "<tool_call>") {
+		return true
+	}
+	return false
+}
+
+func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created int64, model string, hasTools bool) (openai.ChatCompletion, string, bool, error) {
+	defer func() {
+		_ = body.Close()
+	}()
+	reader := qwen.NewStreamReader(body)
+	var content strings.Builder
+	inThinking := false
+	finishReason := "stop"
+
+	for {
+		evt, err := reader.Next()
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return openai.ChatCompletion{}, "", false, err
+		}
+		if evt.Done {
+			break
+		}
+		if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
+			continue
+		}
+		choice := evt.Delta.Choices[0]
+		text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
+		inThinking = next
+		content.WriteString(text)
+		if choice.FinishReason != nil {
+			finishReason = *choice.FinishReason
+		}
+	}
+	if inThinking {
+		content.WriteString("</think>")
+	}
+
+	fullContent := content.String()
+	truncated := hasTools && isTruncatedToolCallContent(fullContent)
+	if hasTools {
+		result := toolcall.ParseWithFormats(fullContent, h.deps.Config.Features.MultiFormatToolParsing)
+		if len(result.ToolCalls) > 0 {
+			var contentPtr *string
+			if strings.TrimSpace(result.Content) != "" {
+				contentPtr = strPtr(result.Content)
+			}
+			resp := openai.ChatCompletion{
+				ID:      id,
+				Object:  "chat.completion",
+				Created: created,
+				Model:   model,
+				Choices: []openai.Choice{{
+					Index: 0,
+					Message: openai.ChatMessageOut{
+						Role:      "assistant",
+						Content:   contentPtr,
+						ToolCalls: result.ToolCalls,
+					},
+					FinishReason: "tool_calls",
+				}},
+			}
+			return resp, fullContent, truncated, nil
+		}
+	}
+
+	resp := openai.ChatCompletion{
+		ID:      id,
+		Object:  "chat.completion",
+		Created: created,
+		Model:   model,
+		Choices: []openai.Choice{{
+			Index:        0,
+			Message:      openai.ChatMessageOut{Role: "assistant", Content: strPtr(fullContent)},
+			FinishReason: finishReason,
+		}},
+	}
+	return resp, fullContent, truncated, nil
+}
 
 // proxyStream re-emits upstream events as OpenAI-style SSE chunks.
 func (h *handlers) proxyStream(w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool) {

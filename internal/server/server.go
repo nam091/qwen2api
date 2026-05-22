@@ -97,6 +97,7 @@ func New(deps Deps) http.Handler {
 		r.Get("/admin/tunnel/status", h.getTunnelStatus)
 		r.Post("/admin/tunnel/start", h.startTunnel)
 		r.Post("/admin/tunnel/stop", h.stopTunnel)
+		r.Post("/admin/shutdown", h.shutdownServer)
 	})
 
 	return r
