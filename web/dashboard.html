@@ -426,6 +426,25 @@
     transform: translateY(-1px);
   }
   
+  .btn-shimmer {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+  }
+  .btn-shimmer::before {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.35), transparent);
+    transform: translateX(-120%) skewX(-20deg);
+    animation: ctaShimmer 3s ease-in-out infinite;
+    pointer-events: none;
+    z-index: 1;
+  }
+  
   .btn-secondary {
     background: rgba(255, 255, 255, 0.05);
     border-color: var(--border-color);
@@ -1015,7 +1034,7 @@
             <!-- Tunnel Row -->
             <div style="display: flex; align-items: center; gap: 16px;">
               <span style="width: 80px; text-align: center; background: rgba(255, 255, 255, 0.05); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Tunnel</span>
-              <button id="endpointTunnelBtn" onclick="toggleEndpointTunnel()" class="btn" style="background: #E56A4A; color: white; padding: 8px 16px; font-size: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+              <button id="endpointTunnelBtn" onclick="toggleEndpointTunnel()" class="btn btn-shimmer" style="background: #E56A4A; color: white; padding: 8px 16px; font-size: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
                 <span class="material-symbols-outlined" style="font-size: 14px;">cloud_upload</span>
                 <span id="endpointTunnelBtnText">Enable</span>
               </button>
@@ -1032,7 +1051,7 @@
             <!-- Tailscale Row -->
             <div style="display: flex; align-items: center; gap: 16px;">
               <span style="width: 80px; text-align: center; background: rgba(255, 255, 255, 0.05); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Tailscale</span>
-              <button id="endpointTailscaleBtn" onclick="toggleEndpointTailscale()" class="btn" style="background: #5850EC; color: white; padding: 8px 16px; font-size: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
+              <button id="endpointTailscaleBtn" onclick="toggleEndpointTailscale()" class="btn btn-shimmer" style="background: #5850EC; color: white; padding: 8px 16px; font-size: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
                 <span class="material-symbols-outlined" style="font-size: 14px;">vpn_lock</span>
                 <span id="endpointTailscaleBtnText">Enable</span>
               </button>
@@ -1139,6 +1158,27 @@
             <div class="card-stat-sub" id="statCacheRatio">0 hits / 0 misses</div>
             <span class="material-symbols-outlined card-stat-icon" style="font-size: 32px; position: absolute; right: 24px; top: 24px; color: var(--text-muted); opacity: 0.3;">bolt</span>
             <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 12 Q 40 4 80 14 T 100 2" fill="none" stroke="var(--accent-color)" stroke-width="1.5"/></svg>
+          </div>
+        </div>
+
+        <!-- TOKEN USAGE CHART CARD -->
+        <div class="card" style="margin-bottom: 32px;">
+          <div class="card-title-area">
+            <div>
+              <h2 style="font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Upstream Tokens Usage & Performance</h2>
+              <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Success hits vs Cooldown failures per configured token</div>
+            </div>
+            <div style="display: flex; gap: 16px;">
+              <span style="font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                <span style="display: inline-block; width: 8px; height: 8px; background: var(--accent-color); border-radius: 50%;"></span> Success Hits
+              </span>
+              <span style="font-size: 12px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px;">
+                <span style="display: inline-block; width: 8px; height: 8px; background: var(--color-danger); border-radius: 50%;"></span> Failures
+              </span>
+            </div>
+          </div>
+          <div style="position: relative; height: 220px; width: 100%;">
+            <canvas id="tokenUsageChart"></canvas>
           </div>
         </div>
 
@@ -1590,8 +1630,10 @@
     </div>
   </div>
 
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <script>
     let currentData = null;
+    let usageChart = null;
     let adminToken = localStorage.getItem('adminToken') || '';
     const modelTestResults = JSON.parse(sessionStorage.getItem('modelTestResults') || '{}');
 
@@ -1692,6 +1734,10 @@
         const badge = activeCard.querySelector('span:last-child');
         if (badge) badge.textContent = 'Active';
       }
+
+      if (currentData && currentData.tokens) {
+        updateTokenChart(currentData.tokens);
+      }
     }
 
     // Load active theme
@@ -1737,6 +1783,126 @@
       adminToken = '';
       localStorage.removeItem('adminToken');
       showAuthOverlay();
+    }
+
+    function updateTokenChart(tokens) {
+      const ctx = document.getElementById('tokenUsageChart');
+      if (!ctx) return;
+
+      if (!tokens || tokens.length === 0) {
+        if (usageChart) {
+          usageChart.destroy();
+          usageChart = null;
+        }
+        return;
+      }
+
+      const labels = tokens.map(t => t.name || t.value.slice(0, 10) + '...');
+      const hitsData = tokens.map(t => t.hits || 0);
+      const failuresData = tokens.map(t => t.failures || 0);
+
+      const style = getComputedStyle(document.documentElement);
+      const accentColor = style.getPropertyValue('--accent-color').trim() || '#E56A4A';
+      const dangerColor = style.getPropertyValue('--color-danger').trim() || '#ef4444';
+      const textColor = style.getPropertyValue('--text-primary').trim() || '#ededed';
+      const textMuted = style.getPropertyValue('--text-muted').trim() || '#6b7280';
+      const borderColor = style.getPropertyValue('--border-color').trim() || '#2a2a2a';
+
+      if (usageChart) {
+        usageChart.data.labels = labels;
+        usageChart.data.datasets[0].data = hitsData;
+        usageChart.data.datasets[0].backgroundColor = accentColor;
+        usageChart.data.datasets[1].data = failuresData;
+        usageChart.data.datasets[1].backgroundColor = dangerColor;
+        usageChart.options.scales.x.grid.color = borderColor;
+        usageChart.options.scales.y.grid.color = borderColor;
+        usageChart.options.scales.x.ticks.color = textMuted;
+        usageChart.options.scales.y.ticks.color = textMuted;
+        usageChart.update();
+      } else {
+        usageChart = new Chart(ctx, {
+          type: 'bar',
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: 'Success Hits',
+                data: hitsData,
+                backgroundColor: accentColor,
+                borderRadius: 6,
+                borderWidth: 0,
+                barPercentage: 0.5,
+                categoryPercentage: 0.6
+              },
+              {
+                label: 'Failures',
+                data: failuresData,
+                backgroundColor: dangerColor,
+                borderRadius: 6,
+                borderWidth: 0,
+                barPercentage: 0.5,
+                categoryPercentage: 0.6
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: false
+              },
+              tooltip: {
+                backgroundColor: 'rgba(26, 26, 26, 0.95)',
+                titleColor: textColor,
+                bodyColor: textColor,
+                borderColor: borderColor,
+                borderWidth: 1,
+                padding: 10,
+                cornerRadius: 8,
+                titleFont: {
+                  family: 'Inter',
+                  weight: '600'
+                },
+                bodyFont: {
+                  family: 'Inter'
+                }
+              }
+            },
+            scales: {
+              x: {
+                grid: {
+                  color: borderColor,
+                  drawOnChartArea: true,
+                  drawTicks: false
+                },
+                ticks: {
+                  color: textMuted,
+                  font: {
+                    family: 'Inter',
+                    size: 11
+                  }
+                }
+              },
+              y: {
+                grid: {
+                  color: borderColor,
+                  drawOnChartArea: true,
+                  drawTicks: false
+                },
+                ticks: {
+                  color: textMuted,
+                  font: {
+                    family: 'Inter',
+                    size: 11
+                  },
+                  precision: 0
+                }
+              }
+            }
+          }
+        });
+      }
     }
 
     // RENDER FUNCTIONS
@@ -1819,6 +1985,9 @@
 
       // Populate Available Models tab
       renderAvailableModels();
+
+      // Render tokens usage chart
+      updateTokenChart(d.tokens || []);
     }
 
     // TOKENS POOL MANAGEMENT
