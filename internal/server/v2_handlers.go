@@ -17,7 +17,7 @@ import (
 // metricsMiddleware tracks request counts and latency.
 func (h *handlers) metricsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if h.deps.Metrics == nil {
+		if h.deps.Metrics == nil || !h.deps.Config.Features.Metrics {
 			next.ServeHTTP(w, r)
 			return
 		}

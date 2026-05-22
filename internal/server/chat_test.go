@@ -33,7 +33,7 @@ func newTestServer(t *testing.T, upstream *httptest.Server) http.Handler {
 	})
 	pool := tokenpool.New(cfg.Tokens, time.Minute)
 	return New(Deps{
-		Config:    cfg,
+		Config:    &cfg,
 		Logger:    slog.Default(),
 		Qwen:      client,
 		TokenPool: pool,

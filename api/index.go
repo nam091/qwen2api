@@ -39,8 +39,9 @@ func build() {
 		Ssxmodi2:       cfg.SsxmodItna2,
 		TimeoutSeconds: cfg.TimeoutSeconds,
 	})
+	client.SetConfigRef(&cfg)
 	httpServer = server.New(server.Deps{
-		Config:    cfg,
+		Config:    &cfg,
 		Logger:    logger,
 		Qwen:      client,
 		TokenPool: pool,

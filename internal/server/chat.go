@@ -1,23 +1,28 @@
 package server
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net/http"
+	"regexp"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"github.com/google/uuid"
 
+	"github.com/keaume34/qwen2api/internal/affinity"
 	"github.com/keaume34/qwen2api/internal/config"
+	"github.com/keaume34/qwen2api/internal/filecache"
 	"github.com/keaume34/qwen2api/internal/openai"
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/reqlog"
 	"github.com/keaume34/qwen2api/internal/toolcall"
+	"github.com/keaume34/qwen2api/internal/topicisolation"
 )
 
 func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
@@ -39,6 +44,14 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	apiKey := bearerOrQuery(r)
+
+	// File Cache (Phase 1 features)
+	h.processFileCache(apiKey, req.Messages)
+
+	// Topic Isolation (Phase 1 features)
+	req.Messages = h.applyTopicIsolation(req.Messages)
+
 	req.Model = h.deps.Config.ResolveModel(req.Model)
 	upstreamReq := buildQwenRequestWithOptions(req, h.deps.Config.Features.Multimodal)
 
@@ -57,6 +70,21 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		cacheKey   string
 	)
 
+	// Session Affinity (Phase 1 features)
+	var sessionKey string
+	if h.deps.Config.Features.SessionAffinity && h.deps.Affinity != nil {
+		var firstUserText string
+		for _, m := range req.Messages {
+			if strings.ToLower(m.Role) == "user" {
+				firstUserText = m.Text()
+				break
+			}
+		}
+		if firstUserText != "" {
+			sessionKey = affinity.DeriveSessionKey(apiKey, firstUserText)
+		}
+	}
+
 	if h.deps.Config.Features.PromptCaching && h.deps.Cache != nil {
 		cacheKey = promptcache.Key(upstreamReq.Model, upstreamReq.Messages[0].Content)
 	}
@@ -70,16 +98,30 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		t, err := h.deps.TokenPool.Take()
-		if err != nil {
-			h.metricsInc("qwen2api_no_upstream_token_total")
-			writeError(w, http.StatusServiceUnavailable, "no_upstream_token", "no Qwen token configured; set QWEN2API_TOKENS")
-			return
+		var chatID string
+		var t config.Token
+		var err error
+
+		useAffinity := false
+		if attempt == 1 && sessionKey != "" {
+			if rec, ok := h.deps.Affinity.Lookup(sessionKey); ok {
+				t = config.Token{Value: rec.TokenValue}
+				chatID = rec.ChatID
+				useAffinity = true
+			}
+		}
+
+		if !useAffinity {
+			t, err = h.deps.TokenPool.Take()
+			if err != nil {
+				h.metricsInc("qwen2api_no_upstream_token_total")
+				writeError(w, http.StatusServiceUnavailable, "no_upstream_token", "no Qwen token configured; set QWEN2API_TOKENS")
+				return
+			}
 		}
 		token = t
 
-		var chatID string
-		if cacheKey != "" {
+		if chatID == "" && cacheKey != "" {
 			if cached, ok := h.deps.Cache.Get(cacheKey); ok {
 				chatID = cached
 				cacheHit = true
@@ -133,6 +175,11 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			h.handleUpstreamFailure(w, token.Value, err, "open completion stream")
 			h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, err)
 			return
+		}
+
+		// Bind session affinity on success
+		if sessionKey != "" && chatID != "" {
+			h.deps.Affinity.Bind(sessionKey, token.Value, chatID)
 		}
 		break
 	}
@@ -774,4 +821,87 @@ func (h *handlers) aggregateStream(w http.ResponseWriter, body io.Reader, id str
 		}},
 	}
 	writeJSON(w, http.StatusOK, resp)
+}
+
+var fileBlockRe = regexp.MustCompile(`<file\s+path=["']?([^"'>\s]+)["']?>([\s\S]*?)</file>`)
+
+func (h *handlers) processFileCache(apiKey string, msgs []openai.ChatMessage) {
+	if h.deps.FileCache == nil || !h.deps.Config.Features.FileCache {
+		return
+	}
+	for i, m := range msgs {
+		text := m.Text()
+		if text == "" {
+			continue
+		}
+		modifiedText := fileBlockRe.ReplaceAllStringFunc(text, func(match string) string {
+			submatches := fileBlockRe.FindStringSubmatch(match)
+			if len(submatches) < 3 {
+				return match
+			}
+			filePath := submatches[1]
+			content := submatches[2]
+			if filecache.IsUnchangedHint(content) {
+				if cached, ok := h.deps.FileCache.Get(apiKey, filePath); ok {
+					return fmt.Sprintf(`<file path="%s">%s</file>`, filePath, cached)
+				}
+			} else {
+				h.deps.FileCache.Put(apiKey, filePath, content)
+			}
+			return match
+		})
+		if modifiedText != text {
+			var buf bytes.Buffer
+			enc := json.NewEncoder(&buf)
+			enc.SetEscapeHTML(false)
+			if err := enc.Encode(modifiedText); err == nil {
+				msgs[i].Content = bytes.TrimSpace(buf.Bytes())
+			}
+		}
+	}
+}
+
+func (h *handlers) applyTopicIsolation(msgs []openai.ChatMessage) []openai.ChatMessage {
+	if !h.deps.Config.Features.TopicIsolation || len(msgs) < 3 {
+		return msgs
+	}
+	var firstUserIdx = -1
+	for i, m := range msgs {
+		if strings.ToLower(m.Role) == "user" {
+			firstUserIdx = i
+			break
+		}
+	}
+	if firstUserIdx == -1 {
+		return msgs
+	}
+	var lastUserIdx = -1
+	for i := len(msgs) - 1; i >= 0; i-- {
+		if strings.ToLower(msgs[i].Role) == "user" {
+			lastUserIdx = i
+			break
+		}
+	}
+	if lastUserIdx <= firstUserIdx {
+		return msgs
+	}
+
+	firstText := msgs[firstUserIdx].Text()
+	lastText := msgs[lastUserIdx].Text()
+
+	detector := topicisolation.NewDetector(0.1)
+	if detector.Changed(firstText, lastText) {
+		if h.deps.Logger != nil {
+			h.deps.Logger.Info("topic isolation triggered: user changed topic", "first", truncate(firstText, 50), "last", truncate(lastText, 50))
+		}
+		var newMsgs []openai.ChatMessage
+		for _, m := range msgs {
+			if strings.ToLower(m.Role) == "system" {
+				newMsgs = append(newMsgs, m)
+			}
+		}
+		newMsgs = append(newMsgs, msgs[lastUserIdx])
+		return newMsgs
+	}
+	return msgs
 }

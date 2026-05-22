@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/keaume34/qwen2api/internal/config"
 )
 
 // ClientConfig configures the upstream HTTP client.
@@ -34,9 +35,10 @@ type ClientConfig struct {
 
 // Client talks to chat.qwen.ai.
 type Client struct {
-	cfg    ClientConfig
-	http   *http.Client
-	stream *http.Client
+	cfg       ClientConfig
+	http      *http.Client
+	stream    *http.Client
+	configRef *config.Config
 }
 
 // NewClient constructs a Client with sensible defaults.
@@ -87,6 +89,11 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 }
 
+// SetConfigRef sets the config reference for dynamic checks.
+func (c *Client) SetConfigRef(cfg *config.Config) {
+	c.configRef = cfg
+}
+
 // applyHeaders adds the standard set of headers expected by chat.qwen.ai. The
 // upstream is strict about `Version`, `source` and a few sec-fetch hints — without
 // them /api/v2/chat/completions returns 400 Bad_Request even with a valid token.
@@ -115,6 +122,14 @@ func (c *Client) applyHeaders(req *http.Request, token string) {
 		cookies = append(cookies, "ssxmod_itna2="+c.cfg.Ssxmodi2)
 	}
 	req.Header.Set("Cookie", strings.Join(cookies, "; "))
+
+	pooling := c.cfg.PoolingEnabled
+	if c.configRef != nil {
+		pooling = c.configRef.Features.ConnectionPooling
+	}
+	if !pooling {
+		req.Close = true
+	}
 }
 
 // Models fetches the dynamic model list. Returns the raw JSON for direct

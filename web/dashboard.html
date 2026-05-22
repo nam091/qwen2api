@@ -743,8 +743,16 @@
   <!-- ADMIN AUTHENTICATION SCREEN -->
   <div id="adminAuthOverlay">
     <div class="auth-card">
-      <div class="logo-icon" style="margin: 0 auto 20px;">
-        <svg viewBox="0 0 24 24"><path d="M18 8h-1V6c0-2.76-2.24-5-5-5S7 3.24 7 6v2H6c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V10c0-1.1-.9-2-2-2zm-6 9c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2zm3.1-9H8.9V6c0-1.71 1.39-3.1 3.1-3.1 1.71 0 3.1 1.39 3.1 3.1v2z"/></svg>
+      <div class="logo-icon" style="margin: 0 auto 20px; width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px var(--accent-glow);">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:24px; height:24px; color:#fff;">
+          <line x1="6" y1="3" x2="8" y2="8" />
+          <line x1="12" y1="2" x2="12" y2="8" />
+          <line x1="18" y1="3" x2="16" y2="8" />
+          <rect x="2" y="8" width="20" height="12" rx="3" fill="rgba(255,255,255,0.1)" />
+          <circle cx="6" cy="14" r="1.2" fill="currentColor" />
+          <circle cx="12" cy="14" r="1.2" fill="currentColor" />
+          <circle cx="18" cy="14" r="1.2" fill="currentColor" />
+        </svg>
       </div>
       <h2 style="margin-bottom: 8px;">Authorization Required</h2>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 24px;">Please enter your admin token to manage endpoints</p>
@@ -767,15 +775,22 @@
       <div class="traffic-light green"></div>
     </div>
  
-    <div class="logo-area">
-      <div class="logo-icon">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" style="width:20px; height:20px; color:#fff;">
-          <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-          <path d="M2 17l10 5 10-5"/>
-          <path d="M2 12l10 5 10-5"/>
+    <div class="logo-area" style="display: flex; align-items: center; gap: 12px; margin-bottom: 32px;">
+      <div class="logo-icon" style="width: 38px; height: 38px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px var(--accent-glow); flex-shrink: 0;">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:22px; height:22px; color:#fff;">
+          <line x1="6" y1="3" x2="8" y2="8" />
+          <line x1="12" y1="2" x2="12" y2="8" />
+          <line x1="18" y1="3" x2="16" y2="8" />
+          <rect x="2" y="8" width="20" height="12" rx="3" fill="rgba(255,255,255,0.1)" />
+          <circle cx="6" cy="14" r="1.2" fill="currentColor" />
+          <circle cx="12" cy="14" r="1.2" fill="currentColor" />
+          <circle cx="18" cy="14" r="1.2" fill="currentColor" />
         </svg>
       </div>
-      <div class="logo-text">qwen2api</div>
+      <div class="logo-text" style="font-size:22px; font-weight:800; font-family:var(--font-sans); letter-spacing:-0.5px; display:flex; align-items:center;">
+        <span style="color:#E56A4A;">9</span><span>Router</span>
+        <span style="font-size: 8px; font-weight: 700; padding: 2px 4px; border: 1px solid rgba(229,106,74,0.3); border-radius: 4px; color: var(--accent-color); margin-left: 8px; background: rgba(229,106,74,0.08); text-transform: uppercase; letter-spacing: 0.5px;">Qwen</span>
+      </div>
     </div>
  
     <div class="status-pill">
@@ -1142,6 +1157,37 @@
             </div>
           </div>
           
+          <!-- TUNNEL INTEGRATION SECTION -->
+          <div style="margin-top: 32px; padding-top: 24px; border-top: 1px solid var(--border-color);">
+            <h3 style="font-size: 13px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 16px; letter-spacing: 0.8px;">Cloudflare Tunnel Integration</h3>
+            <div style="background: var(--bg-card); border: 1px solid var(--border-color); border-radius: 12px; padding: 20px;">
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 16px;">
+                <div>
+                  <div style="font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 4px;">Public Tunnel Access</div>
+                  <div style="font-size: 12px; color: var(--text-secondary);">Expose your local gateway via free Cloudflare tunnel with fixed URL</div>
+                </div>
+                <div style="display: flex; align-items: center; gap: 12px;">
+                  <span id="tunnelStatusBadge" style="font-size: 11px; padding: 4px 10px; border-radius: 6px; font-weight: 600; background: var(--color-warning); color: #000;">Checking...</span>
+                  <button id="tunnelToggleBtn" class="btn btn-primary btn-sm" onclick="toggleTunnel()" disabled>
+                    <svg style="width:14px;height:14px;fill:currentColor;margin-right:4px;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                    Start Tunnel
+                  </button>
+                </div>
+              </div>
+              <div id="tunnelUrlDisplay" style="display: none; background: rgba(255,255,255,0.03); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px; margin-top: 12px;">
+                <div style="font-size: 11px; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.5px;">Public URL</div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <code id="tunnelUrl" style="flex: 1; font-size: 13px; color: var(--accent-color); background: transparent; padding: 0;">https://...</code>
+                  <button class="btn btn-secondary btn-sm" onclick="copyTunnelUrl()" style="padding: 4px 10px;">
+                    <svg style="width:14px;height:14px;fill:currentColor;" viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg>
+                  </button>
+                </div>
+              </div>
+              <div style="margin-top: 12px; font-size: 11px; color: var(--text-muted); line-height: 1.5;">
+                <strong>Note:</strong> Requires <code style="background: rgba(255,255,255,0.05); padding: 2px 6px; border-radius: 4px;">cloudflared</code> installed. Download from <a href="https://developers.cloudflare.com/cloudflare-one/connections/connect-apps/install-and-setup/installation/" target="_blank" style="color: var(--accent-color); text-decoration: none;">Cloudflare Docs</a>
+              </div>
+            </div>
+          </div>
           <div style="margin-top: 24px;">
             <h3 style="font-size: 13px; font-weight: 600; text-transform: uppercase; color: var(--text-muted); margin-bottom: 16px; letter-spacing: 0.8px;">Personalize Dashboard Theme</h3>
             
@@ -1395,21 +1441,11 @@
 
     // API CONFIG REQUESTS
     async function refresh() {
-      if (!adminToken) {
-        showAuthOverlay();
-        return;
-      }
-
       try {
         const r = await fetch("/dashboard/data");
-        if (r.status === 401) {
-          showAuthOverlay();
-          return;
-        }
         if (!r.ok) throw new Error("HTTP " + r.status);
         
         currentData = await r.json();
-        hideAuthOverlay();
         renderDashboard(currentData);
       } catch (e) {
         showToast("Connection to backend lost: " + e.message, "error");
@@ -1432,6 +1468,7 @@
       }
       adminToken = tokVal;
       localStorage.setItem('adminToken', adminToken);
+      hideAuthOverlay();
       refresh();
     }
 
@@ -1666,6 +1703,12 @@
     }
 
     async function toggleFeatureItem(key, checked) {
+      if (!adminToken) {
+        showToast("Admin authentication required to edit features", "error");
+        refresh();
+        return;
+      }
+
       const updated = { ...currentData.features };
       updated[key] = checked;
 
@@ -1678,12 +1721,17 @@
           },
           body: JSON.stringify(updated)
         });
+        if (r.status === 401) {
+          showToast("Invalid admin token", "error");
+          lockAdminConsole();
+          return;
+        }
         if (!r.ok) throw new Error("HTTP " + r.status);
         showToast(`Feature ${key} updated`, "success");
         refresh();
       } catch (e) {
         showToast("Failed to switch toggle: " + e.message, "error");
-        refresh(); // revert checkbox
+        refresh();
       }
     }
 
@@ -2094,12 +2142,12 @@
       
       STANDARD_MODELS.forEach(m => {
         const caps = [];
-        if (m.thinking !== 'no') caps.push('<span class="badge badge-success" style="font-size:10px; margin-right:4px;">Thinking</span>');
-        if (m.search !== 'no') caps.push('<span class="badge badge-warning" style="font-size:10px; margin-right:4px;">Search</span>');
+        if (m.thinking !== 'no') caps.push('<span class="badge badge-success" style="font-size:10px;">Thinking</span>');
+        if (m.search !== 'no') caps.push('<span class="badge badge-warning" style="font-size:10px;">Search</span>');
         if (m.modality.includes('image') || m.modality.includes('video') || m.modality.includes('audio')) {
           caps.push('<span class="badge badge-success" style="font-size:10px; background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2);">Omni</span>');
         }
-        const capStr = caps.length > 0 ? caps.join('') : '<span style="color:var(--text-muted); font-size:12px;">Standard</span>';
+        const capStr = caps.length > 0 ? `<div style="display:flex; flex-wrap:wrap; gap:6px 4px; align-items:center;">${caps.join('')}</div>` : '<span style="color:var(--text-muted); font-size:12px;">Standard</span>';
 
         html += `
           <tr data-model-search="${m.id} ${m.name} ${m.modality}">
@@ -2159,6 +2207,11 @@
     }
 
     async function testModelConnectivity(modelId) {
+      if (!adminToken) {
+        showToast("Admin authentication required to test models", "error");
+        return;
+      }
+
       const escapedId = modelId.replace(/\./g, '-');
       const statusCell = document.getElementById(`status-model-${escapedId}`);
       const btn = document.getElementById(`btn-test-${escapedId}`);
@@ -2176,6 +2229,12 @@
           },
           body: JSON.stringify({ model: modelId })
         });
+        if (r.status === 401) {
+          showToast("Invalid admin token", "error");
+          statusCell.innerHTML = `<span class="badge badge-danger">Auth Failed</span>`;
+          if (btn) btn.disabled = false;
+          return;
+        }
         if (!r.ok) throw new Error("HTTP " + r.status);
         const res = await r.json();
         
@@ -2222,6 +2281,110 @@
     // AUTO LOOP REFRESH
     refresh();
     setInterval(refresh, 5000);
+
+    // Tunnel Management Functions
+    let tunnelState = { running: false, url: '', port: 0 };
+
+    async function checkTunnelStatus() {
+      if (!adminToken) {
+        tunnelState = { enabled: false, running: false, url: '', port: 0 };
+        updateTunnelUI();
+        return;
+      }
+      try {
+        const r = await fetch('/admin/tunnel/status', {
+          headers: { 'Authorization': 'Bearer ' + adminToken }
+        });
+        if (!r.ok) throw new Error('HTTP ' + r.status);
+        const data = await r.json();
+        tunnelState = data;
+        updateTunnelUI();
+      } catch (e) {
+        console.error('Tunnel status check failed:', e);
+        tunnelState = { enabled: false, running: false, url: '', port: 0 };
+        updateTunnelUI();
+      }
+    }
+
+    function updateTunnelUI() {
+      const badge = document.getElementById('tunnelStatusBadge');
+      const btn = document.getElementById('tunnelToggleBtn');
+      const urlDisplay = document.getElementById('tunnelUrlDisplay');
+      const urlCode = document.getElementById('tunnelUrl');
+
+      if (!badge || !btn) return;
+
+      if (tunnelState.running) {
+        badge.textContent = 'Active';
+        badge.style.background = 'var(--color-success)';
+        badge.style.color = '#000';
+        btn.innerHTML = '<svg style="width:14px;height:14px;fill:currentColor;margin-right:4px;" viewBox="0 0 24 24"><path d="M6 6h12v12H6z"/></svg>Stop Tunnel';
+        btn.disabled = false;
+        if (urlDisplay && urlCode && tunnelState.url) {
+          urlDisplay.style.display = 'block';
+          urlCode.textContent = tunnelState.url;
+        }
+      } else {
+        badge.textContent = 'Inactive';
+        badge.style.background = 'var(--text-muted)';
+        badge.style.color = '#fff';
+        btn.innerHTML = '<svg style="width:14px;height:14px;fill:currentColor;margin-right:4px;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>Start Tunnel';
+        btn.disabled = false;
+        if (urlDisplay) {
+          urlDisplay.style.display = 'none';
+        }
+      }
+    }
+
+    async function toggleTunnel() {
+      if (!adminToken) {
+        showToast('Admin authentication required to manage tunnel', 'error');
+        return;
+      }
+
+      const btn = document.getElementById('tunnelToggleBtn');
+      if (!btn) return;
+
+      btn.disabled = true;
+
+      try {
+        if (tunnelState.running) {
+          const r = await fetch('/admin/tunnel/stop', {
+            method: 'POST',
+            headers: { 'Authorization': 'Bearer ' + adminToken }
+          });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          showToast('Tunnel stopped successfully', 'success');
+        } else {
+          const r = await fetch('/admin/tunnel/start', {
+            method: 'POST',
+            headers: {
+              'Authorization': 'Bearer ' + adminToken,
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ port: 0 })
+          });
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const data = await r.json();
+          showToast('Tunnel started: ' + data.url, 'success');
+        }
+        await checkTunnelStatus();
+      } catch (e) {
+        showToast('Tunnel operation failed: ' + e.message, 'error');
+        btn.disabled = false;
+      }
+    }
+
+    function copyTunnelUrl() {
+      const urlCode = document.getElementById('tunnelUrl');
+      if (!urlCode) return;
+      const url = urlCode.textContent;
+      navigator.clipboard.writeText(url).then(() => {
+        showToast('Tunnel URL copied: ' + url, 'success');
+      }).catch(err => {
+        showToast('Copy failed: ' + err, 'error');
+      });
+    }
   </script>
 </body>
 </html>

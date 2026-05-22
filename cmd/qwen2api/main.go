@@ -57,6 +57,7 @@ func run() error {
 		TimeoutSeconds: cfg.TimeoutSeconds,
 		PoolingEnabled: cfg.Features.ConnectionPooling,
 	})
+	client.SetConfigRef(&cfg)
 
 	var cache *promptcache.Cache
 	if cfg.Features.PromptCaching {
@@ -76,9 +77,8 @@ func run() error {
 		reqLogger = rl
 	}
 
-	if cfg.Features.AutoTokenRefresh {
-		go tokenHealthLoop(logger, client, pool, cfg)
-	}
+	// tokenHealthLoop runs unconditionally but checks Features.AutoTokenRefresh dynamically.
+	go tokenHealthLoop(logger, client, pool, &cfg)
 
 	var affinityStore *affinity.Store
 	if cfg.Features.SessionAffinity {
@@ -99,7 +99,7 @@ func run() error {
 	}
 
 	srv := server.New(server.Deps{
-		Config:        cfg,
+		Config:        &cfg,
 		Logger:        logger,
 		Qwen:          client,
 		TokenPool:     pool,
@@ -156,7 +156,7 @@ func run() error {
 
 // tokenHealthLoop periodically pings upstream to detect dead/expired tokens
 // and decodes JWT exp to warn before expiry.
-func tokenHealthLoop(logger *slog.Logger, client *qwen.Client, pool *tokenpool.Pool, cfg config.Config) {
+func tokenHealthLoop(logger *slog.Logger, client *qwen.Client, pool *tokenpool.Pool, cfg *config.Config) {
 	interval := time.Duration(cfg.TokenRefresh.CheckIntervalSeconds) * time.Second
 	if interval <= 0 {
 		interval = 5 * time.Minute
@@ -168,6 +168,9 @@ func tokenHealthLoop(logger *slog.Logger, client *qwen.Client, pool *tokenpool.P
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
+		if !cfg.Features.AutoTokenRefresh {
+			continue
+		}
 		now := time.Now()
 		for _, st := range pool.Statuses() {
 			exp := decodeJWTExp(st.Value)
