@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Qw2API - Premium Gateway Dashboard</title>
+<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23E56A4A' viewBox='0 0 24 24'%3E%3Cpath d='M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
@@ -43,6 +44,9 @@
     --bg-surface-3: #3a3a3a;
     --scrollbar-thumb: rgba(255, 255, 255, 0.12);
     --scrollbar-thumb-hover: rgba(255, 255, 255, 0.24);
+    --bg-input: rgba(0, 0, 0, 0.2);
+    --bg-input-focus: rgba(0, 0, 0, 0.3);
+    --bg-input-inline: rgba(0, 0, 0, 0.15);
   }
 
   /* Theme: Qw2API Cream (Light Mode) */
@@ -67,55 +71,12 @@
     --bg-surface-3: #e5e7eb;
     --scrollbar-thumb: rgba(0, 0, 0, 0.15);
     --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
+    --bg-input: #ffffff;
+    --bg-input-focus: #ffffff;
+    --bg-input-inline: rgba(0, 0, 0, 0.04);
   }
 
-  /* Theme: Cyberpunk Neon */
-  [data-theme="cyberpunk"] {
-    --bg-main: #050508;
-    --bg-card: rgba(13, 13, 21, 0.85);
-    --bg-header: rgba(15, 15, 27, 0.8);
-    --bg-sidebar: rgba(7, 7, 13, 0.85);
-    --border-color: #ff007f33;
-    --border-active: #00f0ff;
-    --text-primary: #00ffff;
-    --text-secondary: #ff00ff;
-    --text-muted: #70427d;
-    --accent-color: #ff00ff;
-    --accent-glow: rgba(255, 0, 255, 0.25);
-    --color-success: #39ff14;
-    --color-warning: #ffff00;
-    --color-danger: #ff003c;
-    --card-shadow: 0 0 20px rgba(255, 0, 255, 0.15);
-    --glass-blur: blur(12px);
-    --bg-surface-2: rgba(25, 25, 35, 0.8);
-    --bg-surface-3: rgba(45, 45, 65, 0.8);
-    --scrollbar-thumb: rgba(0, 255, 255, 0.2);
-    --scrollbar-thumb-hover: rgba(0, 255, 255, 0.4);
-  }
 
-  /* Theme: Emerald Glass */
-  [data-theme="emerald"] {
-    --bg-main: #06100c;
-    --bg-card: rgba(10, 28, 20, 0.75);
-    --bg-header: rgba(11, 34, 24, 0.8);
-    --bg-sidebar: rgba(8, 26, 18, 0.85);
-    --border-color: rgba(16, 185, 129, 0.15);
-    --border-active: #10b981;
-    --text-primary: #ecfdf5;
-    --text-secondary: #a7f3d0;
-    --text-muted: #34d39966;
-    --accent-color: #10b981;
-    --accent-glow: rgba(16, 185, 129, 0.25);
-    --color-success: #34d399;
-    --color-warning: #fbbf24;
-    --color-danger: #f87171;
-    --card-shadow: 0 8px 32px 0 rgba(4, 30, 20, 0.5);
-    --glass-blur: blur(16px);
-    --bg-surface-2: rgba(15, 45, 30, 0.8);
-    --bg-surface-3: rgba(25, 65, 45, 0.8);
-    --scrollbar-thumb: rgba(16, 185, 129, 0.2);
-    --scrollbar-thumb-hover: rgba(16, 185, 129, 0.4);
-  }
 
   /* CORE STYLING */
   * { 
@@ -580,7 +541,7 @@
   input[type="text"], input[type="password"], input[type="number"], select, textarea {
     width: 100%;
     padding: 12px 16px;
-    background: rgba(0, 0, 0, 0.2);
+    background: var(--bg-input);
     border: 1px solid var(--border-color);
     border-radius: 8px;
     color: var(--text-primary);
@@ -591,7 +552,7 @@
   input:focus, select:focus, textarea:focus {
     border-color: var(--border-active);
     box-shadow: 0 0 10px var(--accent-glow);
-    background: rgba(0, 0, 0, 0.3);
+    background: var(--bg-input-focus);
   }
   .form-group { margin-bottom: 20px; }
   .form-group label { display: block; margin-bottom: 8px; font-size: 13px; font-weight: 500; color: var(--text-secondary); }
@@ -663,7 +624,7 @@
 
   /* ALIAS ROW & INLINE FORMS */
   .alias-table-editor td { vertical-align: middle; }
-  .alias-input-inline { background: rgba(0, 0, 0, 0.15); padding: 8px 12px; border-radius: 6px; font-size: 13px; }
+  .alias-input-inline { background: var(--bg-input-inline); padding: 8px 12px; border-radius: 6px; font-size: 13px; }
 
   /* DYNAMIC MODALS */
   .modal {
@@ -906,7 +867,7 @@
   <div id="adminAuthOverlay">
     <div class="auth-card">
       <div class="logo-icon" style="margin: 0 auto 20px; width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px var(--accent-glow);">
-        <span class="material-symbols-outlined" style="font-size:24px; color:#fff;">hub</span>
+        <svg fill="currentColor" fill-rule="evenodd" viewBox="0 0 24 24" style="width: 26px; height: 26px; color: #fff; flex-shrink: 0;"><title>Qwen</title><path d="M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z"></path></svg>
       </div>
       <h2 style="margin-bottom: 8px;">Authorization Required</h2>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 24px;">Please enter your admin token to manage endpoints</p>
@@ -931,7 +892,7 @@
  
     <div class="logo-area" style="display: flex; align-items: center; gap: 12px; margin-bottom: 32px;">
       <div class="logo-icon" style="width: 38px; height: 38px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px var(--accent-glow); flex-shrink: 0;">
-        <span class="material-symbols-outlined" style="font-size:22px; color:#fff;">hub</span>
+        <svg fill="currentColor" fill-rule="evenodd" viewBox="0 0 24 24" style="width: 22px; height: 22px; color: #fff; flex-shrink: 0;"><title>Qwen</title><path d="M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z"></path></svg>
       </div>
       <div class="logo-text" style="font-size:22px; font-weight:800; font-family:var(--font-sans); letter-spacing:-0.5px; display:flex; align-items:center;">
         <span style="color:#E56A4A;">Qw2</span><span>API</span>
@@ -1476,73 +1437,7 @@
                 <span class="theme-card-status">Active</span>
               </div>
 
-              <!-- Cyberpunk Neon card -->
-              <div class="theme-card" onclick="setDashboardTheme('cyberpunk')" data-theme-id="cyberpunk">
-                <div class="theme-card-info">
-                  <div class="theme-card-title">
-                    <span>Cyberpunk Neon</span>
-                  </div>
-                  <div class="theme-card-desc">Vibrant synthwave neon pink and electric cyan.</div>
-                </div>
-                
-                <!-- Mock Mini Dashboard Window -->
-                <div class="theme-mock-window" style="background: #050508; border-color: #ff007f33;">
-                  <div class="theme-mock-sidebar" style="background: #070713; border-color: #ff007f33;">
-                    <div style="display: flex; gap: 3px; margin-bottom: 4px;">
-                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FF5F56;"></span>
-                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FFBD2E;"></span>
-                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #27C93F;"></span>
-                    </div>
-                    <span class="theme-mock-bar" style="background: #ff00ff; opacity: 1; width: 85%;"></span>
-                    <span class="theme-mock-bar" style="width: 60%; background: #00ffff; opacity: 0.6;"></span>
-                    <span class="theme-mock-bar" style="width: 50%;"></span>
-                  </div>
-                  <div class="theme-mock-content">
-                    <div style="display: flex; gap: 4px; margin-bottom: 2px;">
-                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(13, 13, 21, 0.85); border: 1px solid #ff007f33; display: flex; align-items: center; padding-left: 3px;"><span style="width: 3px; height: 3px; border-radius: 50%; background: #39ff14;"></span></div>
-                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(13, 13, 21, 0.85); border: 1px solid #ff007f33;"></div>
-                    </div>
-                    <div class="theme-mock-pill" style="background: #00ffff; opacity: 0.15;"></div>
-                    <div class="theme-mock-accent-pill" style="background: #ff00ff; box-shadow: 0 0 4px rgba(255, 0, 255, 0.4);"></div>
-                  </div>
-                </div>
-                
-                <span class="theme-card-status">Select</span>
-              </div>
 
-              <!-- Emerald Aura card -->
-              <div class="theme-card" onclick="setDashboardTheme('emerald')" data-theme-id="emerald">
-                <div class="theme-card-info">
-                  <div class="theme-card-title">
-                    <span>Emerald Aura</span>
-                  </div>
-                  <div class="theme-card-desc">Modern, relaxing glass green forest theme.</div>
-                </div>
-                
-                <!-- Mock Mini Dashboard Window -->
-                <div class="theme-mock-window" style="background: #06100c; border-color: rgba(16, 185, 129, 0.15);">
-                  <div class="theme-mock-sidebar" style="background: #082618; border-color: rgba(16, 185, 129, 0.15);">
-                    <div style="display: flex; gap: 3px; margin-bottom: 4px;">
-                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FF5F56;"></span>
-                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #FFBD2E;"></span>
-                      <span style="width: 4px; height: 4px; border-radius: 50%; background: #27C93F;"></span>
-                    </div>
-                    <span class="theme-mock-bar" style="background: #10b981; opacity: 1; width: 85%;"></span>
-                    <span class="theme-mock-bar" style="width: 60%;"></span>
-                    <span class="theme-mock-bar" style="width: 50%;"></span>
-                  </div>
-                  <div class="theme-mock-content">
-                    <div style="display: flex; gap: 4px; margin-bottom: 2px;">
-                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(10, 28, 20, 0.75); border: 1px solid rgba(16, 185, 129, 0.15); display: flex; align-items: center; padding-left: 3px;"><span style="width: 3px; height: 3px; border-radius: 50%; background: #34d399;"></span></div>
-                      <div style="flex: 1; height: 12px; border-radius: 3px; background: rgba(10, 28, 20, 0.75); border: 1px solid rgba(16, 185, 129, 0.15);"></div>
-                    </div>
-                    <div class="theme-mock-pill" style="background: #ecfdf5; opacity: 0.1;"></div>
-                    <div class="theme-mock-accent-pill" style="background: #10b981; box-shadow: 0 0 4px rgba(16, 185, 129, 0.4);"></div>
-                  </div>
-                </div>
-                
-                <span class="theme-card-status">Select</span>
-              </div>
 
               <!-- Light mode cream card -->
               <div class="theme-card" onclick="setDashboardTheme('light')" data-theme-id="light">
@@ -1741,7 +1636,10 @@
     }
 
     // Load active theme
-    const savedTheme = localStorage.getItem('dashboard-theme') || 'midnight';
+    let savedTheme = localStorage.getItem('dashboard-theme') || 'midnight';
+    if (savedTheme !== 'midnight' && savedTheme !== 'light') {
+      savedTheme = 'midnight';
+    }
     setDashboardTheme(savedTheme);
 
     // API CONFIG REQUESTS
