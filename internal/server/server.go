@@ -90,6 +90,7 @@ func New(deps Deps) http.Handler {
 		r.Get("/admin/config", h.getConfig)
 		r.Put("/admin/config/features", h.updateFeatures)
 		r.Post("/admin/config/tokens", h.addToken)
+		r.Post("/admin/config/tokens/test", h.testTokenValidity)
 		r.Delete("/admin/config/tokens", h.removeToken)
 		r.Put("/admin/config/aliases", h.updateModelAliases)
 		r.Get("/admin/logs/stream", h.streamLogs)

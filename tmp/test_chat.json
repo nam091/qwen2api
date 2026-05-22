@@ -1,8 +1,0 @@
-{
-  "model": "qwen-plus",
-  "messages": [
-    {"role": "system", "content": "You are a helpful assistant."},
-    {"role": "user", "content": "Say hi"}
-  ],
-  "stream": false
-}

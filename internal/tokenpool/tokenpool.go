@@ -40,6 +40,40 @@ func New(tokens []config.Token, cooldown time.Duration) *Pool {
 	return &Pool{slots: slots, cooldown: cooldown}
 }
 
+// SetTokens updates the active pool of tokens thread-safely.
+func (p *Pool) SetTokens(tokens []config.Token) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	newSlots := make([]*slot, 0, len(tokens))
+	for _, t := range tokens {
+		if t.Value == "" {
+			continue
+		}
+		// If token already exists in previous slots, keep its hits, failures, and cooldownEnd!
+		var existing *slot
+		for _, s := range p.slots {
+			if s.token.Value == t.Value {
+				existing = s
+				break
+			}
+		}
+		if existing != nil {
+			existing.token.Name = t.Name
+			newSlots = append(newSlots, existing)
+		} else {
+			newSlots = append(newSlots, &slot{token: t})
+		}
+	}
+	p.slots = newSlots
+	// Ensure cursor is within bounds
+	if len(p.slots) > 0 {
+		p.cursor = p.cursor % len(p.slots)
+	} else {
+		p.cursor = 0
+	}
+}
+
 // Size returns the number of tokens currently in the pool.
 func (p *Pool) Size() int {
 	p.mu.Lock()

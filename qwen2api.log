@@ -1,0 +1,4 @@
+{"time":"2026-05-22T09:56:31.2792407Z","request_id":"","api_key":"***","model":"qwen3.6-plus","token":"***","status":503,"latency_ms":0,"stream":false,"has_tools":false,"cache_hit":false,"error":"no Qwen token available"}
+{"time":"2026-05-22T09:57:45.0749974Z","request_id":"","api_key":"***","model":"qwen3.6-plus","token":"***","status":503,"latency_ms":0,"stream":false,"has_tools":false,"cache_hit":false,"error":"no Qwen token available"}
+{"time":"2026-05-22T09:59:30.9693149Z","request_id":"","api_key":"***","model":"qwen3.6-plus","token":"***","status":503,"latency_ms":0,"stream":false,"has_tools":false,"cache_hit":false,"error":"no Qwen token available"}
+{"time":"2026-05-22T10:01:44.1532688Z","request_id":"","api_key":"***","model":"qwen3.6-plus","token":"***","status":503,"latency_ms":0,"stream":false,"has_tools":false,"cache_hit":false,"error":"no Qwen token available"}

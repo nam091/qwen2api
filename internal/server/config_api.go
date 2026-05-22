@@ -1,14 +1,30 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/keaume34/qwen2api/internal/cliconfig"
 	"github.com/keaume34/qwen2api/internal/config"
 )
+
+func (h *handlers) saveConfig() error {
+	path := os.Getenv("QWEN2API_CONFIG_PATH")
+	if path == "" {
+		path = "config.json"
+	}
+	data, err := json.MarshalIndent(h.deps.Config, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, data, 0644)
+}
 
 // getConfig returns the current configuration (admin only).
 func (h *handlers) getConfig(w http.ResponseWriter, _ *http.Request) {
@@ -31,24 +47,66 @@ func (h *handlers) updateFeatures(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// addToken adds a new Qwen token to the pool (admin only).
+// addToken adds new Qwen token(s) to the pool (admin only). Supports single token, array of tokens, or bulk tokens container.
 func (h *handlers) addToken(w http.ResponseWriter, r *http.Request) {
-	var body config.Token
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "invalid JSON: "+err.Error())
+	rawBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "failed to read body: "+err.Error())
 		return
 	}
 
-	if body.Value == "" {
-		writeError(w, http.StatusBadRequest, "invalid_request_error", "token value is required")
+	var tokensToAdd []config.Token
+
+	// Try 1: Single Token
+	var single config.Token
+	if err := json.Unmarshal(rawBody, &single); err == nil && single.Value != "" {
+		tokensToAdd = append(tokensToAdd, single)
+	} else {
+		// Try 2: Array of tokens
+		var arr []config.Token
+		if err := json.Unmarshal(rawBody, &arr); err == nil && len(arr) > 0 {
+			tokensToAdd = arr
+		} else {
+			// Try 3: Object with "tokens" field
+			var container struct {
+				Tokens []config.Token `json:"tokens"`
+			}
+			if err := json.Unmarshal(rawBody, &container); err == nil && len(container.Tokens) > 0 {
+				tokensToAdd = container.Tokens
+			}
+		}
+	}
+
+	if len(tokensToAdd) == 0 {
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "no valid token values provided")
 		return
 	}
 
-	h.deps.Config.Tokens = append(h.deps.Config.Tokens, body)
-	h.deps.Logger.Info("token added via API", "name", body.Name)
+	// Validate and append to Config and update active pool
+	var added []config.Token
+	for _, t := range tokensToAdd {
+		t.Value = strings.TrimSpace(t.Value)
+		if t.Value == "" {
+			continue
+		}
+		t.Name = strings.TrimSpace(t.Name)
+		h.deps.Config.Tokens = append(h.deps.Config.Tokens, t)
+		added = append(added, t)
+	}
+
+	// Dynamic update in-memory active pool!
+	h.deps.TokenPool.SetTokens(h.deps.Config.Tokens)
+
+	// Save to config.json!
+	if err := h.saveConfig(); err != nil {
+		h.deps.Logger.Error("failed to save config to file", "err", err)
+	}
+
+	h.deps.Logger.Info("tokens added via API", "count", len(added))
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"success": true,
-		"total": len(h.deps.Config.Tokens),
+		"added":   len(added),
+		"total":   len(h.deps.Config.Tokens),
 	})
 }
 
@@ -83,10 +141,51 @@ func (h *handlers) removeToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.deps.Config.Tokens = newTokens
+
+	// Dynamic update in-memory active pool!
+	h.deps.TokenPool.SetTokens(h.deps.Config.Tokens)
+
+	// Save to config.json!
+	if err := h.saveConfig(); err != nil {
+		h.deps.Logger.Error("failed to save config to file", "err", err)
+	}
+
 	h.deps.Logger.Info("token removed via API")
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"total": len(h.deps.Config.Tokens),
+	})
+}
+
+// testTokenValidity checks if a given Qwen token is valid by querying the upstream Models list (admin only).
+func (h *handlers) testTokenValidity(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		Value string `json:"value"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "invalid JSON: "+err.Error())
+		return
+	}
+
+	if body.Value == "" {
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "token value is required")
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Second)
+	defer cancel()
+
+	_, err := h.deps.Qwen.Models(ctx, body.Value)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"valid": false,
+			"error": err.Error(),
+		})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"valid": true,
 	})
 }
 
