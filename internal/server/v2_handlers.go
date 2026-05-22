@@ -92,7 +92,7 @@ func (h *handlers) listAPIKeys(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"keys": out})
 }
 
-// createAPIKey appends a new key (in-memory only; not persisted).
+// createAPIKey appends or updates an API key (in-memory only; not persisted).
 func (h *handlers) createAPIKey(w http.ResponseWriter, r *http.Request) {
 	if !h.deps.Config.Features.APIKeyRotation {
 		writeError(w, http.StatusForbidden, "feature_disabled", "API Key Rotation feature is disabled")
@@ -107,7 +107,20 @@ func (h *handlers) createAPIKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "value is required")
 		return
 	}
-	h.deps.Config.APIKeys = append(h.deps.Config.APIKeys, body)
+
+	updated := false
+	for i, k := range h.deps.Config.APIKeys {
+		if k.Value == body.Value {
+			h.deps.Config.APIKeys[i].Name = body.Name
+			h.deps.Config.APIKeys[i].ExpiresAt = body.ExpiresAt
+			updated = true
+			break
+		}
+	}
+	if !updated {
+		h.deps.Config.APIKeys = append(h.deps.Config.APIKeys, body)
+	}
+
 	writeJSON(w, http.StatusCreated, map[string]any{"created": body.Name, "total": len(h.deps.Config.APIKeys)})
 }
 
@@ -231,6 +244,18 @@ func (h *handlers) dashboardData(w http.ResponseWriter, _ *http.Request) {
 
 // streamLogs provides real-time HTTP server-sent events for request logs.
 func (h *handlers) streamLogs(w http.ResponseWriter, r *http.Request) {
+	if h.deps.ReqLog == nil {
+		writeError(w, http.StatusServiceUnavailable, "feature_disabled", "Request logging is not enabled. Enable it in config to use live logs.")
+		return
+	}
+
+	logChan := h.deps.ReqLog.Subscribe()
+	if logChan == nil {
+		writeError(w, http.StatusServiceUnavailable, "feature_disabled", "Request logging is not enabled. Enable it in config to use live logs.")
+		return
+	}
+	defer h.deps.ReqLog.Unsubscribe(logChan)
+
 	flusher, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
@@ -242,13 +267,6 @@ func (h *handlers) streamLogs(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("Access-Control-Allow-Origin", "*")
 	w.Header().Set("X-Accel-Buffering", "no")
-
-	logChan := h.deps.ReqLog.Subscribe()
-	if logChan == nil {
-		http.Error(w, "Logger not configured", http.StatusInternalServerError)
-		return
-	}
-	defer h.deps.ReqLog.Unsubscribe(logChan)
 
 	// Keep alive ticker to prevent connection close due to inactivity
 	ticker := time.NewTicker(15 * time.Second)

@@ -3,25 +3,31 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>qwen2api - Premium Gateway Dashboard</title>
+<title>Qw2API - Premium Gateway Dashboard</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:ital,opsz,wght@0,14..32,100..900;1,14..32,100..900&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200" />
 <style>
-  /* DESIGN SYSTEM & THEMES (9ROUTER STYLE) */
+  /* DESIGN SYSTEM & THEMES (QW2API STYLE) */
   :root {
-    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif;
+    --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'SF Pro Display', system-ui, sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
     --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   }
 
-  /* Theme: 9Router Charcoal (Default Dark) */
+  h1, h2, h3, h4, h5, h6, .logo-text {
+    letter-spacing: -0.03em;
+    font-weight: 600;
+  }
+
+  /* Theme: Qw2API Charcoal (Default Dark) */
   [data-theme="midnight"] {
     --bg-main: #1a1a1a;
-    --bg-card: rgba(38, 38, 38, 0.75);
+    --bg-card: #262626;
     --bg-header: rgba(26, 26, 26, 0.8);
     --bg-sidebar: rgba(30, 30, 30, 0.85);
-    --border-color: #333333;
+    --border-color: #2a2a2a;
     --border-active: #E56A4A;
     --text-primary: #ededed;
     --text-secondary: #9ca3af;
@@ -33,9 +39,13 @@
     --color-danger: #ef4444;
     --card-shadow: 0 16px 48px -8px rgba(0,0,0,0.55);
     --glass-blur: blur(20px);
+    --bg-surface-2: #303030;
+    --bg-surface-3: #3a3a3a;
+    --scrollbar-thumb: rgba(255, 255, 255, 0.12);
+    --scrollbar-thumb-hover: rgba(255, 255, 255, 0.24);
   }
 
-  /* Theme: 9Router Cream (Light Mode) */
+  /* Theme: Qw2API Cream (Light Mode) */
   [data-theme="light"] {
     --bg-main: #FDFAF6;
     --bg-card: rgba(255, 255, 255, 0.85);
@@ -53,6 +63,10 @@
     --color-danger: #cf222e;
     --card-shadow: 0 12px 36px -8px rgba(15,23,42,0.10);
     --glass-blur: blur(20px);
+    --bg-surface-2: #f3f4f6;
+    --bg-surface-3: #e5e7eb;
+    --scrollbar-thumb: rgba(0, 0, 0, 0.15);
+    --scrollbar-thumb-hover: rgba(0, 0, 0, 0.3);
   }
 
   /* Theme: Cyberpunk Neon */
@@ -73,6 +87,10 @@
     --color-danger: #ff003c;
     --card-shadow: 0 0 20px rgba(255, 0, 255, 0.15);
     --glass-blur: blur(12px);
+    --bg-surface-2: rgba(25, 25, 35, 0.8);
+    --bg-surface-3: rgba(45, 45, 65, 0.8);
+    --scrollbar-thumb: rgba(0, 255, 255, 0.2);
+    --scrollbar-thumb-hover: rgba(0, 255, 255, 0.4);
   }
 
   /* Theme: Emerald Glass */
@@ -93,10 +111,23 @@
     --color-danger: #f87171;
     --card-shadow: 0 8px 32px 0 rgba(4, 30, 20, 0.5);
     --glass-blur: blur(16px);
+    --bg-surface-2: rgba(15, 45, 30, 0.8);
+    --bg-surface-3: rgba(25, 65, 45, 0.8);
+    --scrollbar-thumb: rgba(16, 185, 129, 0.2);
+    --scrollbar-thumb-hover: rgba(16, 185, 129, 0.4);
   }
 
   /* CORE STYLING */
-  * { box-sizing: border-box; margin: 0; padding: 0; outline: none; }
+  * { 
+    box-sizing: border-box; 
+    margin: 0; 
+    padding: 0; 
+    outline: none; 
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    letter-spacing: -0.02em;
+  }
   body {
     font-family: var(--font-sans);
     background: var(--bg-main);
@@ -106,6 +137,67 @@
     overflow: hidden;
     position: relative;
     transition: var(--transition-smooth);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    letter-spacing: -0.02em;
+  }
+
+  /* Custom Scrollbar for the whole page and scrollable elements */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb, rgba(255, 255, 255, 0.12));
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover, rgba(255, 255, 255, 0.24));
+  }
+
+  .content-body::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  .content-body::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  .content-body::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb, rgba(255, 255, 255, 0.12));
+    border-radius: 3px;
+  }
+  .content-body::-webkit-scrollbar-thumb:hover {
+    background: var(--scrollbar-thumb-hover, rgba(255, 255, 255, 0.24));
+  }
+
+  /* Material Symbols Styling */
+  .material-symbols-outlined {
+    font-family: 'Material Symbols Outlined', sans-serif;
+    font-weight: 400;
+    font-style: normal;
+    font-size: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    vertical-align: middle;
+    line-height: 1;
+    text-transform: none;
+    letter-spacing: normal;
+    word-wrap: normal;
+    white-space: nowrap;
+    direction: ltr;
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'liga';
+    font-variation-settings: 'FILL' 0, 'wght' 500, 'GRAD' 0.2, 'opsz' 24;
+  }
+  .material-symbols-outlined.fill-1 {
+    font-variation-settings: 'FILL' 1, 'wght' 500, 'GRAD' 0.2, 'opsz' 24;
   }
 
   /* Dot Grid Background Pattern */
@@ -135,6 +227,11 @@
     -webkit-backdrop-filter: var(--glass-blur);
     z-index: 50;
     overflow-y: auto;
+    -ms-overflow-style: none;  /* IE and Edge */
+    scrollbar-width: none;  /* Firefox */
+  }
+  aside::-webkit-scrollbar {
+    display: none;             /* Chrome, Safari and Opera */
   }
 
   /* macOS Traffic Lights */
@@ -196,21 +293,28 @@
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 12px 16px;
+    padding: 8px 14px;
     border-radius: 8px;
     color: var(--text-secondary);
-    font-size: 14px;
+    font-size: 14.5px;
     font-weight: 500;
     cursor: pointer;
     text-decoration: none;
     transition: var(--transition-smooth);
+    margin-bottom: 4px;
   }
-  .nav-item:hover, .nav-item.active {
+  .nav-item:hover {
     color: var(--text-primary);
-    background: rgba(255, 255, 255, 0.05);
-    border-left: 3px solid var(--accent-color);
+    background: var(--bg-surface-2);
   }
-  .nav-item svg { width: 18px; height: 18px; fill: currentColor; }
+  .nav-item.active {
+    color: var(--accent-color);
+    background: color-mix(in srgb, var(--accent-color) 10%, transparent);
+  }
+  .nav-item .material-symbols-outlined {
+    font-size: 20px !important;
+  }
+  .nav-item svg { width: 20px; height: 20px; fill: currentColor; }
 
   /* THEME SELECTOR */
   .theme-box {
@@ -294,8 +398,8 @@
     transform: scale(0.96);
   }
   
-  /* CTA SHIMMER BUTTONS (9ROUTER SIGNATURE) */
-  .btn-primary {
+  /* CTA SHIMMER BUTTONS (QW2API SIGNATURE) */
+  .btn-shimmer {
     background: var(--accent-color);
     color: white;
     box-shadow: 0 8px 24px -8px var(--accent-glow);
@@ -394,8 +498,8 @@
   .card {
     background: var(--bg-card);
     border: 1px solid var(--border-color);
-    border-radius: 16px;
-    padding: 32px;
+    border-radius: 14px;
+    padding: 24px;
     box-shadow: var(--card-shadow);
     backdrop-filter: var(--glass-blur);
     -webkit-backdrop-filter: var(--glass-blur);
@@ -405,6 +509,38 @@
     border-color: var(--border-active);
     box-shadow: var(--card-shadow), 0 0 16px var(--accent-glow);
   }
+  
+  /* Label pill for API Endpoint rows */
+  .label-pill {
+    width: 88px;
+    text-align: center;
+    background: var(--bg-surface-2, #303030);
+    padding: 6px 12px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    font-weight: 600;
+    color: var(--text-muted, #9ca3af);
+    flex-shrink: 0;
+    letter-spacing: 0.5px;
+  }
+  
+  /* Input Display styling like Next.js template */
+  .input-display-wrapper {
+    display: flex;
+    align-items: center;
+    background: var(--bg-surface-2, #303030);
+    border: 1px solid transparent;
+    border-radius: 10px;
+    padding: 10px 14px;
+    flex-grow: 1;
+    transition: var(--transition-smooth);
+  }
+  .input-display-wrapper:focus-within {
+    border-color: rgba(229, 106, 74, 0.4);
+    box-shadow: 0 0 0 3px rgba(229, 106, 74, 0.18);
+  }
+  
   .card-title-area {
     display: flex;
     justify-content: space-between;
@@ -444,7 +580,7 @@
   /* SEARCH BAR */
   .search-wrapper { position: relative; margin-bottom: 16px; }
   .search-wrapper input { padding-left: 40px; }
-  .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; fill: var(--text-muted); }
+  .search-icon { position: absolute; left: 14px; top: 50%; transform: translateY(-50%); color: var(--text-muted); font-size: 18px; }
 
   /* GLASS TOGGLES & SWITCHES */
   .switch-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 20px; }
@@ -475,7 +611,7 @@
     position: absolute;
     cursor: pointer;
     top: 0; left: 0; right: 0; bottom: 0;
-    background-color: rgba(255, 255, 255, 0.15);
+    background-color: var(--bg-surface-3, #3a3a3a);
     border-radius: 34px;
     transition: .3s;
   }
@@ -751,15 +887,7 @@
   <div id="adminAuthOverlay">
     <div class="auth-card">
       <div class="logo-icon" style="margin: 0 auto 20px; width: 44px; height: 44px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px var(--accent-glow);">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:24px; height:24px; color:#fff;">
-          <line x1="6" y1="3" x2="8" y2="8" />
-          <line x1="12" y1="2" x2="12" y2="8" />
-          <line x1="18" y1="3" x2="16" y2="8" />
-          <rect x="2" y="8" width="20" height="12" rx="3" fill="rgba(255,255,255,0.1)" />
-          <circle cx="6" cy="14" r="1.2" fill="currentColor" />
-          <circle cx="12" cy="14" r="1.2" fill="currentColor" />
-          <circle cx="18" cy="14" r="1.2" fill="currentColor" />
-        </svg>
+        <span class="material-symbols-outlined" style="font-size:24px; color:#fff;">hub</span>
       </div>
       <h2 style="margin-bottom: 8px;">Authorization Required</h2>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 24px;">Please enter your admin token to manage endpoints</p>
@@ -784,19 +912,10 @@
  
     <div class="logo-area" style="display: flex; align-items: center; gap: 12px; margin-bottom: 32px;">
       <div class="logo-icon" style="width: 38px; height: 38px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 10px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 15px var(--accent-glow); flex-shrink: 0;">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:22px; height:22px; color:#fff;">
-          <line x1="6" y1="3" x2="8" y2="8" />
-          <line x1="12" y1="2" x2="12" y2="8" />
-          <line x1="18" y1="3" x2="16" y2="8" />
-          <rect x="2" y="8" width="20" height="12" rx="3" fill="rgba(255,255,255,0.1)" />
-          <circle cx="6" cy="14" r="1.2" fill="currentColor" />
-          <circle cx="12" cy="14" r="1.2" fill="currentColor" />
-          <circle cx="18" cy="14" r="1.2" fill="currentColor" />
-        </svg>
+        <span class="material-symbols-outlined" style="font-size:22px; color:#fff;">hub</span>
       </div>
       <div class="logo-text" style="font-size:22px; font-weight:800; font-family:var(--font-sans); letter-spacing:-0.5px; display:flex; align-items:center;">
-        <span style="color:#E56A4A;">9</span><span>Router</span>
-        <span style="font-size: 8px; font-weight: 700; padding: 2px 4px; border: 1px solid rgba(229,106,74,0.3); border-radius: 4px; color: var(--accent-color); margin-left: 8px; background: rgba(229,106,74,0.08); text-transform: uppercase; letter-spacing: 0.5px;">Qwen</span>
+        <span style="color:#E56A4A;">Qw2</span><span>API</span>
       </div>
     </div>
  
@@ -807,44 +926,42 @@
  
     <ul class="nav-menu">
       <li class="nav-item active" onclick="switchTab('endpoint', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><rect x="16" y="16" width="6" height="6" rx="1" /><rect x="2" y="16" width="6" height="6" rx="1" /><rect x="9" y="2" width="6" height="6" rx="1" /><path d="M12 8v8M5 16v-3a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v3" /></svg>
+        <span class="material-symbols-outlined fill-1" style="font-size:18px;">api</span>
         Endpoint
       </li>
       <li class="nav-item" onclick="switchTab('overview', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><rect x="3" y="3" width="7" height="9" rx="1" /><rect x="14" y="3" width="7" height="5" rx="1" /><rect x="14" y="12" width="7" height="9" rx="1" /><rect x="3" y="16" width="7" height="5" rx="1" /></svg>
+        <span class="material-symbols-outlined" style="font-size:18px;">bar_chart</span>
         Overview
       </li>
       <li class="nav-item" onclick="switchTab('tokens', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><circle cx="8" cy="8" r="6" /><circle cx="18" cy="18" r="6" /><path d="M12 18a6 6 0 0 0-6-6" /></svg>
+        <span class="material-symbols-outlined" style="font-size:18px;">token</span>
         Tokens Pool
       </li>
       <li class="nav-item" onclick="switchTab('features', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><rect x="3" y="6" width="18" height="12" rx="4" /><circle cx="15" cy="12" r="3" /></svg>
+        <span class="material-symbols-outlined" style="font-size:18px;">toggle_on</span>
         Feature Toggles
       </li>
       <li class="nav-item" onclick="switchTab('aliases', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><path d="M16 3h5v5M4 20L21 3M21 16v5h-5M15 15l6 6M4 4l5 5"/></svg>
+        <span class="material-symbols-outlined" style="font-size:18px;">alt_route</span>
         Model Aliases
       </li>
       <li class="nav-item" onclick="switchTab('models', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-dasharray="none" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path><polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline><line x1="12" y1="22.08" x2="12" y2="12"></line></svg>
+        <span class="material-symbols-outlined" style="font-size:18px;">deployed_code</span>
         Available Models
       </li>
       <li class="nav-item" onclick="switchTab('logs', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><polyline points="4 17 10 11 4 5" /><line x1="12" y1="19" x2="20" y2="19" /></svg>
+        <span class="material-symbols-outlined" style="font-size:18px;">terminal</span>
         Live Logs
       </li>
       <li class="nav-item" onclick="switchTab('settings', this)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px; color:currentColor;"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        <span class="material-symbols-outlined" style="font-size:18px;">settings</span>
         Settings
       </li>
     </ul>
     
     <div style="margin-top: auto; padding-top: 16px;">
       <button onclick="confirmShutdown()" class="btn btn-secondary" style="width: 100%; justify-content: center; background: rgba(0,0,0,0.4); border: 1px solid var(--border-color); color: var(--text-primary); border-radius: 8px; padding: 12px; display: inline-flex; align-items: center; gap: 8px; font-weight: 600;">
-        <svg style="width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2;" viewBox="0 0 24 24">
-          <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
-        </svg>
+        <span class="material-symbols-outlined" style="font-size:16px;">power_settings_new</span>
         Shutdown
       </button>
     </div>
@@ -856,9 +973,7 @@
       <div style="display: flex; flex-direction: column; gap: 4px;">
         <div style="display: flex; align-items: center; gap: 8px;">
           <div id="pageTitleIcon" style="display: flex; align-items: center;">
-            <svg viewBox="0 0 24 24" fill="none" stroke="var(--accent-color)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:18px; height:18px;">
-              <path d="M12 2L2 12l10 10 10-10L12 2z"/>
-            </svg>
+            <span class="material-symbols-outlined" style="font-size: 20px; color: var(--accent-color);">api</span>
           </div>
           <h1 id="pageTitle" style="font-size: 20px; font-weight: 600; line-height: 1.2;">Endpoint</h1>
         </div>
@@ -879,9 +994,7 @@
           <div class="card-title-area" style="margin-bottom: 20px;">
             <div style="display: flex; align-items: center; gap: 10px;">
               <div style="width: 24px; height: 24px; background: linear-gradient(135deg, var(--accent-color), #ff8a6c); border-radius: 6px; display: flex; align-items: center; justify-content: center; box-shadow: 0 0 10px var(--accent-glow);">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px; height:14px; color:#fff;">
-                  <path d="M12 2L2 12l10 10 10-10L12 2z"/>
-                </svg>
+                <span class="material-symbols-outlined" style="font-size:14px; color:#fff;">api</span>
               </div>
               <h2 style="font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">API Endpoint</h2>
             </div>
@@ -894,7 +1007,7 @@
               <div style="display: flex; align-items: center; background: rgba(0, 0, 0, 0.2); border: 1px solid var(--border-color); border-radius: 8px; padding: 12px 16px; flex-grow: 1;">
                 <code id="endpointLocalUrl" style="flex-grow: 1; font-family: var(--font-mono); font-size: 13px; color: var(--text-primary);">http://localhost:15001/v1</code>
                 <button onclick="copyLocalUrl()" style="background: none; border: none; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; padding: 0 4px;" title="Copy URL">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                  <span class="material-symbols-outlined" style="font-size: 16px;">content_copy</span>
                 </button>
               </div>
             </div>
@@ -903,14 +1016,14 @@
             <div style="display: flex; align-items: center; gap: 16px;">
               <span style="width: 80px; text-align: center; background: rgba(255, 255, 255, 0.05); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Tunnel</span>
               <button id="endpointTunnelBtn" onclick="toggleEndpointTunnel()" class="btn" style="background: #E56A4A; color: white; padding: 8px 16px; font-size: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>
+                <span class="material-symbols-outlined" style="font-size: 14px;">cloud_upload</span>
                 <span id="endpointTunnelBtnText">Enable</span>
               </button>
               <div id="endpointTunnelUrlWrapper" style="display: none; align-items: center; gap: 8px; flex-grow: 1; margin-left: 8px;">
                 <div style="display: flex; align-items: center; background: rgba(255, 138, 108, 0.05); border: 1px solid rgba(229, 106, 74, 0.3); border-radius: 8px; padding: 12px 16px; flex-grow: 1;">
                   <code id="endpointTunnelUrl" style="flex-grow: 1; font-family: var(--font-mono); font-size: 13px; color: var(--accent-color);">https://...</code>
                   <button onclick="copyToClipboard(document.getElementById('endpointTunnelUrl').textContent)" style="background: none; border: none; cursor: pointer; color: var(--accent-color); display: flex; align-items: center;" title="Copy Public URL">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 16px; height: 16px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    <span class="material-symbols-outlined" style="font-size: 16px;">content_copy</span>
                   </button>
                 </div>
               </div>
@@ -920,7 +1033,7 @@
             <div style="display: flex; align-items: center; gap: 16px;">
               <span style="width: 80px; text-align: center; background: rgba(255, 255, 255, 0.05); padding: 6px 12px; border-radius: 6px; font-size: 11px; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px;">Tailscale</span>
               <button id="endpointTailscaleBtn" onclick="toggleEndpointTailscale()" class="btn" style="background: #5850EC; color: white; padding: 8px 16px; font-size: 12px; border-radius: 6px; display: inline-flex; align-items: center; gap: 6px; font-weight: 600;">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>
+                <span class="material-symbols-outlined" style="font-size: 14px;">vpn_lock</span>
                 <span id="endpointTailscaleBtnText">Enable</span>
               </button>
               <span id="tailscaleStatusText" style="font-size: 12px; color: var(--text-muted); margin-left: 8px; display: none;">Tailscale is currently inactive</span>
@@ -935,7 +1048,7 @@
             <div style="display: flex; align-items: center; justify-content: space-between; padding-bottom: 16px; border-bottom: 1px solid var(--border-color);">
               <div>
                 <h2 style="font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px;">
-                  <svg style="width:16px; height:16px; fill: none; stroke: var(--accent-color); stroke-width: 2;" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                  <span class="material-symbols-outlined" style="font-size: 18px; color: var(--accent-color);">vpn_key</span>
                   Require API Key
                 </h2>
                 <div style="font-size: 12px; color: var(--text-muted); margin-top: 4px;">Requests without a valid key will be rejected</div>
@@ -961,15 +1074,15 @@
           <!-- Right side: New key form with visual secure generator -->
           <div class="card" style="display: flex; flex-direction: column; gap: 16px;">
             <h2 style="font-size: 16px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; gap: 8px;">
-              <svg style="width:16px; height:16px; fill: none; stroke: var(--accent-color); stroke-width: 2;" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4"/></svg>
-              Generate Secure API Key
+              <span id="newKeyFormIcon" class="material-symbols-outlined" style="font-size: 18px; color: var(--accent-color);">add</span>
+              <span id="newKeyFormTitle">Generate Secure API Key</span>
             </h2>
             
             <div class="form-group">
               <label>API Key Value</label>
               <div class="key-gen-box" style="display: flex; gap: 8px;">
                 <input type="text" id="newKeyVal" placeholder="sk-qwen-..." style="flex: 1; padding: 10px 14px; background: rgba(0,0,0,0.2); border: 1px solid var(--border-color); border-radius: 8px; color: var(--text-primary); font-family: var(--font-mono); font-size: 13px;">
-                <button class="btn btn-secondary" onclick="generateRandomKeyStr()" style="padding: 10px 16px;">Generate</button>
+                <button id="newKeyGenBtn" class="btn btn-secondary" onclick="generateRandomKeyStr()" style="padding: 10px 16px;">Generate</button>
               </div>
             </div>
 
@@ -988,8 +1101,9 @@
               </select>
             </div>
 
-            <div style="margin-top: 16px; display: flex; justify-content: flex-end;">
-              <button class="btn btn-primary" onclick="saveNewApiKey()">Authorize Key</button>
+            <div style="margin-top: 16px; display: flex; justify-content: flex-end; gap: 8px;">
+              <button id="cancelEditKeyBtn" class="btn btn-secondary" onclick="cancelEditApiKey()" style="display: none; padding: 10px 16px;">Cancel</button>
+              <button id="newKeySubmitBtn" class="btn btn-primary" onclick="saveNewApiKey()" style="padding: 10px 16px;">Authorize Key</button>
             </div>
           </div>
         </div>
@@ -1002,28 +1116,28 @@
             <div class="card-stat-title">Active Requests</div>
             <div class="card-stat-value" id="statActiveRequests">0</div>
             <div class="card-stat-sub">Current ongoing streams</div>
-            <svg class="card-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline></svg>
+            <span class="material-symbols-outlined card-stat-icon" style="font-size: 32px; position: absolute; right: 24px; top: 24px; color: var(--text-muted); opacity: 0.3;">sensors</span>
             <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 10 Q 25 15 50 8 T 100 12" fill="none" stroke="var(--accent-color)" stroke-width="1.5"/></svg>
           </div>
           <div class="card-stat">
             <div class="card-stat-title">Total Requests</div>
             <div class="card-stat-value" id="statTotalRequests">0</div>
             <div class="card-stat-sub">Hits on all model endpoints</div>
-            <svg class="card-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 2 7 12 12 22 7 12 2"></polygon><polyline points="2 17 12 22 22 17"></polyline><polyline points="2 12 12 17 22 12"></polyline></svg>
+            <span class="material-symbols-outlined card-stat-icon" style="font-size: 32px; position: absolute; right: 24px; top: 24px; color: var(--text-muted); opacity: 0.3;">bar_chart</span>
             <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 15 Q 30 5 60 18 T 100 5" fill="none" stroke="var(--color-success)" stroke-width="1.5"/></svg>
           </div>
           <div class="card-stat">
             <div class="card-stat-title">Tokens Count</div>
             <div class="card-stat-value" id="statTokenCount">0</div>
             <div class="card-stat-sub" id="statCooldownCount">0 on cooldown</div>
-            <svg class="card-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"></path></svg>
+            <span class="material-symbols-outlined card-stat-icon" style="font-size: 32px; position: absolute; right: 24px; top: 24px; color: var(--text-muted); opacity: 0.3;">token</span>
             <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 8 Q 20 18 50 12 T 100 16" fill="none" stroke="var(--color-warning)" stroke-width="1.5"/></svg>
           </div>
           <div class="card-stat">
             <div class="card-stat-title">Cache Hit Rate</div>
             <div class="card-stat-value" id="statCacheHitRate">0%</div>
             <div class="card-stat-sub" id="statCacheRatio">0 hits / 0 misses</div>
-            <svg class="card-stat-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon></svg>
+            <span class="material-symbols-outlined card-stat-icon" style="font-size: 32px; position: absolute; right: 24px; top: 24px; color: var(--text-muted); opacity: 0.3;">bolt</span>
             <svg class="mini-spark" viewBox="0 0 100 20" preserveAspectRatio="none"><path d="M0 12 Q 40 4 80 14 T 100 2" fill="none" stroke="var(--accent-color)" stroke-width="1.5"/></svg>
           </div>
         </div>
@@ -1086,13 +1200,13 @@
           <div class="card-title-area">
             <h2>Upstream Qwen Tokens Pool</h2>
             <button class="btn btn-primary" onclick="openModal('addTokenModal')">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
               Add New Token
             </button>
           </div>
           
           <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span class="material-symbols-outlined search-icon">search</span>
             <input type="text" id="tokenSearchInput" oninput="filterTokens()" placeholder="Filter tokens by friendly name or value snippet...">
           </div>
 
@@ -1135,13 +1249,13 @@
           <div class="card-title-area">
             <h2>Model Compatibility Aliases</h2>
             <button class="btn btn-primary" onclick="openAddAliasModal()">
-              <svg style="width:16px;height:16px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
+              <span class="material-symbols-outlined" style="font-size: 16px;">add</span>
               Add Custom Alias
             </button>
           </div>
           
           <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span class="material-symbols-outlined search-icon">search</span>
             <input type="text" id="aliasSearchInput" oninput="filterAliases()" placeholder="Filter aliases by request model or real target model...">
           </div>
 
@@ -1179,7 +1293,7 @@
           </div>
           
           <div class="search-wrapper" style="margin-bottom: 16px;">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span class="material-symbols-outlined search-icon">search</span>
             <input type="text" id="logSearchInput" oninput="filterLogs()" placeholder="Search terminal output...">
           </div>
 
@@ -1211,14 +1325,14 @@
             </div>
             <div>
               <button class="btn btn-primary" id="btn-test-all-models" onclick="testAllModelsSequentially()">
-                <svg style="width:16px;height:16px;margin-right:6px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="5 3 19 12 5 21 5 3"></polygon></svg>
+                <span class="material-symbols-outlined" style="font-size: 16px; margin-right: 6px;">play_arrow</span>
                 Test Live One-by-One
               </button>
             </div>
           </div>
           
           <div class="search-wrapper">
-            <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+            <span class="material-symbols-outlined search-icon">search</span>
             <input type="text" id="modelSearchInput" oninput="filterAvailableModels()" placeholder="Search models by ID, name, features, modality...">
           </div>
 
@@ -1264,7 +1378,7 @@
                 <div style="display: flex; align-items: center; gap: 12px;">
                   <span id="tunnelStatusBadge" style="font-size: 11px; padding: 4px 10px; border-radius: 6px; font-weight: 600; background: var(--color-warning); color: #000;">Checking...</span>
                   <button id="tunnelToggleBtn" class="btn btn-primary btn-sm" onclick="toggleTunnel()" disabled>
-                    <svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"></path></svg>
+                    <span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px;">play_arrow</span>
                     Start Tunnel
                   </button>
                 </div>
@@ -1274,7 +1388,7 @@
                 <div style="display: flex; align-items: center; gap: 8px;">
                   <code id="tunnelUrl" style="flex: 1; font-size: 13px; color: var(--accent-color); background: transparent; padding: 0;">https://...</code>
                   <button class="btn btn-secondary btn-sm" onclick="copyTunnelUrl()" style="padding: 4px 10px;">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+                    <span class="material-symbols-outlined" style="font-size: 14px;">content_copy</span>
                   </button>
                 </div>
               </div>
@@ -1294,7 +1408,7 @@
                   <div class="theme-card-title">
                     <span>Midnight Charcoal</span>
                   </div>
-                  <div class="theme-card-desc">9Router premium dark with orange accent glow.</div>
+                  <div class="theme-card-desc">Qw2API premium dark with orange accent glow.</div>
                 </div>
                 
                 <!-- Mock Mini Dashboard Window -->
@@ -1394,7 +1508,7 @@
               <div class="theme-card" onclick="setDashboardTheme('light')" data-theme-id="light">
                 <div class="theme-card-info">
                   <div class="theme-card-title">
-                    <span>9Router Cream</span>
+                    <span>Qw2API Cream</span>
                   </div>
                   <div class="theme-card-desc">Warm soft cream mode for bright daylight reading.</div>
                 </div>
@@ -1501,7 +1615,11 @@
     // Active Navigation State
     function switchTab(tabId, el) {
       document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
-      document.querySelectorAll('.nav-item').forEach(item => item.classList.remove('active'));
+      document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.remove('active');
+        const icon = item.querySelector('.material-symbols-outlined');
+        if (icon) icon.classList.remove('fill-1');
+      });
       
       const panel = document.getElementById(tabId);
       if (panel) panel.classList.add('active');
@@ -1509,6 +1627,8 @@
       const activeEl = el || document.querySelector(`.nav-item[onclick*="'${tabId}'"]`);
       if (activeEl) {
         activeEl.classList.add('active');
+        const icon = activeEl.querySelector('.material-symbols-outlined');
+        if (icon) icon.classList.add('fill-1');
       }
 
       const titles = {
@@ -1538,16 +1658,15 @@
       document.getElementById('pageSubtitle').textContent = subtitles[tabId] || '';
 
       if (activeEl) {
-        const svg = activeEl.querySelector('svg');
-        if (svg) {
+        const iconSpan = activeEl.querySelector('.material-symbols-outlined');
+        if (iconSpan) {
           const container = document.getElementById('pageTitleIcon');
           if (container) {
             container.innerHTML = '';
-            const clonedSvg = svg.cloneNode(true);
-            clonedSvg.style.width = '20px';
-            clonedSvg.style.height = '20px';
-            clonedSvg.style.color = 'var(--accent-color)';
-            container.appendChild(clonedSvg);
+            const clonedIcon = iconSpan.cloneNode(true);
+            clonedIcon.style.fontSize = '20px';
+            clonedIcon.style.color = 'var(--accent-color)';
+            container.appendChild(clonedIcon);
           }
         }
       }
@@ -2012,6 +2131,8 @@
     }
 
     // API KEYS MANAGER
+    let isEditingKey = false;
+
     function renderApiKeysTab() {
       const tbody = document.querySelector('#endpointApiKeysTable tbody');
       const keys = currentData.api_keys || [];
@@ -2026,15 +2147,93 @@
         const exp = k.expires_at ? new Date(k.expires_at * 1000).toLocaleDateString() : "never";
         html += `
           <tr>
-            <td style="font-weight:600;">${k.name || '—'}</td>
-            <td><code style="font-family:var(--font-mono);font-size:12px;">${k.value}</code></td>
-            <td style="text-align: right;">
-              <button class="btn btn-danger btn-sm" onclick="deleteApiKeyItem('${k.value}')">Revoke</button>
+            <td style="padding: 12px 8px;">
+              <div style="font-weight:600; color:var(--text-primary); font-size:13px;">${k.name || '—'}</div>
+              <div style="font-size:11px; color:var(--text-muted); margin-top:2px; display:flex; align-items:center; gap:4px;">
+                <span class="material-symbols-outlined" style="font-size:12px;">schedule</span> Expires: ${exp}
+              </div>
+            </td>
+            <td style="padding: 12px 8px;">
+              <div style="display:flex; align-items:center; gap:6px;">
+                <code style="font-family:var(--font-mono);font-size:12px; background:rgba(0,0,0,0.15); padding:2px 6px; border-radius:4px;">${k.value}</code>
+                <button class="btn-icon" style="background:none; border:none; color:var(--text-muted); cursor:pointer; display:flex; align-items:center; padding:2px; transition:color 0.2s;" onmouseover="this.style.color='var(--accent-color)'" onmouseout="this.style.color='var(--text-muted)'" onclick="copyApiKey('${k.value}')" title="Copy Key">
+                  <span class="material-symbols-outlined" style="font-size:16px;">content_copy</span>
+                </button>
+              </div>
+            </td>
+            <td style="text-align: right; padding: 12px 8px;">
+              <div style="display:flex; gap:6px; justify-content:flex-end;">
+                <button class="btn btn-secondary btn-sm" style="padding: 4px 8px; font-size: 11px;" onclick="startEditApiKey('${k.value}', '${k.name || ''}', ${k.expires_at || 0})">Edit</button>
+                <button class="btn btn-danger btn-sm" style="padding: 4px 8px; font-size: 11px;" onclick="deleteApiKeyItem('${k.value}')">Revoke</button>
+              </div>
             </td>
           </tr>
         `;
       });
       tbody.innerHTML = html;
+    }
+
+    function copyApiKey(val) {
+      navigator.clipboard.writeText(val).then(() => {
+        showToast("API Key copied to clipboard", "success");
+      }).catch(err => {
+        showToast("Failed to copy key: " + err, "error");
+      });
+    }
+
+    function startEditApiKey(value, name, expiresAt) {
+      isEditingKey = true;
+      
+      document.getElementById('newKeyFormIcon').textContent = 'edit';
+      document.getElementById('newKeyFormTitle').textContent = 'Edit API Key';
+      document.getElementById('newKeyVal').value = value;
+      document.getElementById('newKeyVal').readOnly = true;
+      document.getElementById('newKeyGenBtn').disabled = true;
+      document.getElementById('newKeyName').value = name;
+      
+      const select = document.getElementById('newKeyExpiry');
+      const tempOpt = select.querySelector('.temp-expiry-opt');
+      if (tempOpt) tempOpt.remove();
+
+      if (expiresAt === 0) {
+        select.value = "0";
+      } else {
+        const diffSec = expiresAt - Math.floor(Date.now() / 1000);
+        const diffDays = Math.ceil(diffSec / (24 * 3600));
+        if (diffDays === 1) select.value = "1";
+        else if (diffDays === 7) select.value = "7";
+        else if (diffDays === 30) select.value = "30";
+        else {
+          const opt = document.createElement('option');
+          opt.className = 'temp-expiry-opt';
+          opt.value = "custom";
+          opt.dataset.timestamp = expiresAt;
+          opt.textContent = "Keep Current Expiry (" + new Date(expiresAt * 1000).toLocaleDateString() + ")";
+          select.appendChild(opt);
+          select.value = "custom";
+        }
+      }
+      
+      document.getElementById('cancelEditKeyBtn').style.display = 'inline-block';
+      document.getElementById('newKeySubmitBtn').textContent = 'Save Changes';
+    }
+
+    function cancelEditApiKey() {
+      isEditingKey = false;
+      document.getElementById('newKeyFormIcon').textContent = 'add';
+      document.getElementById('newKeyFormTitle').textContent = 'Generate Secure API Key';
+      document.getElementById('newKeyVal').value = '';
+      document.getElementById('newKeyVal').readOnly = false;
+      document.getElementById('newKeyGenBtn').disabled = false;
+      document.getElementById('newKeyName').value = '';
+      
+      const select = document.getElementById('newKeyExpiry');
+      const tempOpt = select.querySelector('.temp-expiry-opt');
+      if (tempOpt) tempOpt.remove();
+      select.value = "0";
+      
+      document.getElementById('cancelEditKeyBtn').style.display = 'none';
+      document.getElementById('newKeySubmitBtn').textContent = 'Authorize Key';
     }
 
     function generateRandomKeyStr() {
@@ -2051,7 +2250,8 @@
     async function saveNewApiKey() {
       const value = document.getElementById('newKeyVal').value.trim();
       const name = document.getElementById('newKeyName').value.trim();
-      const days = parseInt(document.getElementById('newKeyExpiry').value);
+      const expirySelect = document.getElementById('newKeyExpiry');
+      const expiryVal = expirySelect.value;
       
       if (!value) {
         showToast("Please generate or enter a key value first", "error");
@@ -2059,8 +2259,16 @@
       }
 
       const bodyObj = { value, name };
-      if (days > 0) {
-        bodyObj.expires_at = Math.floor(Date.now() / 1000) + (days * 24 * 3600);
+      if (expiryVal === 'custom') {
+        const tempOpt = expirySelect.querySelector('.temp-expiry-opt');
+        if (tempOpt) {
+          bodyObj.expires_at = parseInt(tempOpt.dataset.timestamp);
+        }
+      } else {
+        const days = parseInt(expiryVal);
+        if (days > 0) {
+          bodyObj.expires_at = Math.floor(Date.now() / 1000) + (days * 24 * 3600);
+        }
       }
 
       try {
@@ -2073,10 +2281,14 @@
           body: JSON.stringify(bodyObj)
         });
         if (!r.ok) throw new Error("HTTP " + r.status);
-        showToast("API Key created and authorized", "success");
-        document.getElementById('newKeyVal').value = '';
-        document.getElementById('newKeyName').value = '';
-        document.getElementById('newKeyExpiry').value = '0';
+        showToast(isEditingKey ? "API Key updated successfully" : "API Key created and authorized", "success");
+        if (isEditingKey) {
+          cancelEditApiKey();
+        } else {
+          document.getElementById('newKeyVal').value = '';
+          document.getElementById('newKeyName').value = '';
+          document.getElementById('newKeyExpiry').value = '0';
+        }
         refresh();
       } catch (e) {
         showToast("Authorization failed: " + e.message, "error");
@@ -2421,16 +2633,7 @@
         for (let i = 0; i < allModelIds.length; i++) {
           const modelId = allModelIds[i];
           btn.innerHTML = `
-            <svg style="width:16px;height:16px;margin-right:6px;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="12" y1="2" x2="12" y2="6"></line>
-              <line x1="12" y1="18" x2="12" y2="22"></line>
-              <line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line>
-              <line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line>
-              <line x1="2" y1="12" x2="6" y2="12"></line>
-              <line x1="18" y1="12" x2="22" y2="12"></line>
-              <line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line>
-              <line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line>
-            </svg>
+            <span class="material-symbols-outlined" style="font-size:16px; margin-right:6px; animation:spin 1s linear infinite;">progress_activity</span>
             Testing (${i + 1}/${allModelIds.length})
           `;
           
@@ -2609,7 +2812,7 @@
       const epUrlWrapper = document.getElementById('endpointTunnelUrlWrapper');
       const epUrlCode = document.getElementById('endpointTunnelUrl');
 
-      const cloudSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>`;
+      const cloudSvg = `<span class="material-symbols-outlined" style="font-size: 14px; vertical-align: middle; margin-right: 4px;">cloud_upload</span>`;
 
       if (tunnelState.running) {
         if (badge) {
@@ -2618,7 +2821,7 @@
           badge.style.color = '#000';
         }
         if (btn) {
-          btn.innerHTML = '<svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="4" width="16" height="16" rx="2" ry="2"></rect></svg>Stop Tunnel';
+          btn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px; vertical-align: middle;">stop</span>Stop Tunnel';
           btn.disabled = false;
         }
         if (urlDisplay && urlCode && tunnelState.url) {
@@ -2628,7 +2831,7 @@
         if (epBtn) {
           epBtn.style.background = 'var(--color-success)';
           epBtn.disabled = false;
-          epBtn.innerHTML = cloudSvg + ' <span id="endpointTunnelBtnText">Disable</span>';
+          epBtn.innerHTML = cloudSvg + '<span id="endpointTunnelBtnText" style="vertical-align: middle;">Disable</span>';
         }
         if (epUrlWrapper && epUrlCode && tunnelState.url) {
           epUrlWrapper.style.display = 'flex';
@@ -2641,7 +2844,7 @@
           badge.style.color = '#fff';
         }
         if (btn) {
-          btn.innerHTML = '<svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"></path></svg>Start Tunnel';
+          btn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 14px; margin-right: 4px; vertical-align: middle;">play_arrow</span>Start Tunnel';
           btn.disabled = false;
         }
         if (urlDisplay) {
@@ -2650,7 +2853,7 @@
         if (epBtn) {
           epBtn.style.background = '#E56A4A';
           epBtn.disabled = false;
-          epBtn.innerHTML = cloudSvg + ' <span id="endpointTunnelBtnText">Enable</span>';
+          epBtn.innerHTML = cloudSvg + '<span id="endpointTunnelBtnText" style="vertical-align: middle;">Enable</span>';
         }
         if (epUrlWrapper) epUrlWrapper.style.display = 'none';
       }
@@ -2665,7 +2868,7 @@
       const btn1 = document.getElementById('tunnelToggleBtn');
       const btn2 = document.getElementById('endpointTunnelBtn');
       const isStopping = tunnelState.running;
-      const spinHtml = `<svg style="width:14px;height:14px;margin-right:4px;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>`;
+      const spinHtml = `<span class="material-symbols-outlined" style="font-size:14px; margin-right:4px; animation:spin 1s linear infinite; vertical-align: middle;">progress_activity</span>`;
 
       if (btn1) {
         btn1.disabled = true;
@@ -2673,7 +2876,7 @@
       }
       if (btn2) {
         btn2.disabled = true;
-        btn2.innerHTML = spinHtml + `<span id="endpointTunnelBtnText">${isStopping ? 'Stopping...' : 'Starting...'}</span>`;
+        btn2.innerHTML = spinHtml + `<span id="endpointTunnelBtnText" style="vertical-align: middle;">${isStopping ? 'Stopping...' : 'Starting...'}</span>`;
       }
 
       try {
