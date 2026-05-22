@@ -151,3 +151,27 @@ func TestLoadAPIKeysAsLegacyStrings(t *testing.T) {
 		t.Errorf("legacy values wrong: %+v", cfg.APIKeys)
 	}
 }
+
+func TestBrowserEngineFallbackDefault(t *testing.T) {
+	cfg := Default()
+	if cfg.Features.BrowserEngineFallback {
+		t.Error("BrowserEngineFallback should default to false")
+	}
+}
+
+func TestBrowserEngineFallbackFromJSON(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.json")
+	body := `{"features":{"browser_engine_fallback":true}}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("QWEN2API_CONFIG_PATH", path)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !cfg.Features.BrowserEngineFallback {
+		t.Error("BrowserEngineFallback not loaded from JSON")
+	}
+}

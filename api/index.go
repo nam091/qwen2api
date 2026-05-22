@@ -33,11 +33,12 @@ func build() {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: cfg.SlogLevel()}))
 	pool := tokenpool.New(cfg.Tokens, time.Duration(cfg.CooldownSeconds)*time.Second)
 	client := qwen.NewClient(qwen.ClientConfig{
-		BaseURL:        cfg.BaseURL,
-		UserAgent:      cfg.UserAgent,
-		SsxmodItna:     cfg.SsxmodItna,
-		Ssxmodi2:       cfg.SsxmodItna2,
-		TimeoutSeconds: cfg.TimeoutSeconds,
+		BaseURL:                cfg.BaseURL,
+		UserAgent:              cfg.UserAgent,
+		SsxmodItna:             cfg.SsxmodItna,
+		Ssxmodi2:               cfg.SsxmodItna2,
+		TimeoutSeconds:         cfg.TimeoutSeconds,
+		BrowserFallbackEnabled: cfg.Features.BrowserEngineFallback,
 	})
 	client.SetConfigRef(&cfg)
 	httpServer = server.New(server.Deps{

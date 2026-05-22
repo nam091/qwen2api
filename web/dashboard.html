@@ -290,6 +290,9 @@
     gap: 8px;
     transition: var(--transition-smooth);
   }
+  .btn:active {
+    transform: scale(0.96);
+  }
   
   /* CTA SHIMMER BUTTONS (9ROUTER SIGNATURE) */
   .btn-primary {
@@ -1261,7 +1264,7 @@
                 <div style="display: flex; align-items: center; gap: 12px;">
                   <span id="tunnelStatusBadge" style="font-size: 11px; padding: 4px 10px; border-radius: 6px; font-weight: 600; background: var(--color-warning); color: #000;">Checking...</span>
                   <button id="tunnelToggleBtn" class="btn btn-primary btn-sm" onclick="toggleTunnel()" disabled>
-                    <svg style="width:14px;height:14px;fill:currentColor;margin-right:4px;" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
+                    <svg style="width:14px;height:14px;margin-right:4px;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3l14 9-14 9V3z"></path></svg>
                     Start Tunnel
                   </button>
                 </div>
@@ -2606,6 +2609,8 @@
       const epUrlWrapper = document.getElementById('endpointTunnelUrlWrapper');
       const epUrlCode = document.getElementById('endpointTunnelUrl');
 
+      const cloudSvg = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width: 14px; height: 14px;"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path></svg>`;
+
       if (tunnelState.running) {
         if (badge) {
           badge.textContent = 'Active';
@@ -2620,8 +2625,11 @@
           urlDisplay.style.display = 'block';
           urlCode.textContent = tunnelState.url;
         }
-        if (epBtn) epBtn.style.background = 'var(--color-success)';
-        if (epText) epText.textContent = 'Disable';
+        if (epBtn) {
+          epBtn.style.background = 'var(--color-success)';
+          epBtn.disabled = false;
+          epBtn.innerHTML = cloudSvg + ' <span id="endpointTunnelBtnText">Disable</span>';
+        }
         if (epUrlWrapper && epUrlCode && tunnelState.url) {
           epUrlWrapper.style.display = 'flex';
           epUrlCode.textContent = tunnelState.url;
@@ -2639,8 +2647,11 @@
         if (urlDisplay) {
           urlDisplay.style.display = 'none';
         }
-        if (epBtn) epBtn.style.background = '#E56A4A';
-        if (epText) epText.textContent = 'Enable';
+        if (epBtn) {
+          epBtn.style.background = '#E56A4A';
+          epBtn.disabled = false;
+          epBtn.innerHTML = cloudSvg + ' <span id="endpointTunnelBtnText">Enable</span>';
+        }
         if (epUrlWrapper) epUrlWrapper.style.display = 'none';
       }
     }
@@ -2651,13 +2662,22 @@
         return;
       }
 
-      const btn = document.getElementById('tunnelToggleBtn');
-      if (!btn) return;
+      const btn1 = document.getElementById('tunnelToggleBtn');
+      const btn2 = document.getElementById('endpointTunnelBtn');
+      const isStopping = tunnelState.running;
+      const spinHtml = `<svg style="width:14px;height:14px;margin-right:4px;animation:spin 1s linear infinite;" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="2" x2="12" y2="6"></line><line x1="12" y1="18" x2="12" y2="22"></line><line x1="4.93" y1="4.93" x2="7.76" y2="7.76"></line><line x1="16.24" y1="16.24" x2="19.07" y2="19.07"></line><line x1="2" y1="12" x2="6" y2="12"></line><line x1="18" y1="12" x2="22" y2="12"></line><line x1="4.93" y1="19.07" x2="7.76" y2="16.24"></line><line x1="16.24" y1="7.76" x2="19.07" y2="4.93"></line></svg>`;
 
-      btn.disabled = true;
+      if (btn1) {
+        btn1.disabled = true;
+        btn1.innerHTML = spinHtml + (isStopping ? 'Stopping...' : 'Starting...');
+      }
+      if (btn2) {
+        btn2.disabled = true;
+        btn2.innerHTML = spinHtml + `<span id="endpointTunnelBtnText">${isStopping ? 'Stopping...' : 'Starting...'}</span>`;
+      }
 
       try {
-        if (tunnelState.running) {
+        if (isStopping) {
           const r = await fetch('/admin/tunnel/stop', {
             method: 'POST',
             headers: { 'Authorization': 'Bearer ' + adminToken }
@@ -2680,7 +2700,7 @@
         await checkTunnelStatus();
       } catch (e) {
         showToast('Tunnel operation failed: ' + e.message, 'error');
-        btn.disabled = false;
+        updateTunnelUI();
       }
     }
 
