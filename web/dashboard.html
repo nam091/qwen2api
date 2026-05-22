@@ -1394,6 +1394,24 @@
   <script>
     let currentData = null;
     let adminToken = localStorage.getItem('adminToken') || '';
+    const modelTestResults = JSON.parse(sessionStorage.getItem('modelTestResults') || '{}');
+
+    function getModelStatusHTML(modelId) {
+      const res = modelTestResults[modelId];
+      if (!res) {
+        return `<span class="badge badge-warning" style="background: rgba(156,163,175,0.1); color: var(--text-secondary); border: 1px solid rgba(156,163,175,0.2);">Not Tested</span>`;
+      }
+      if (res.status === 'testing') {
+        return `<span class="badge badge-warning">Testing...</span>`;
+      }
+      if (res.status === 'live') {
+        return `<span class="badge badge-success" style="font-variant-numeric: tabular-nums;">Live (${res.latency_ms}ms)</span>`;
+      }
+      if (res.status === 'auth_failed') {
+        return `<span class="badge badge-danger">Auth Failed</span>`;
+      }
+      return `<span class="badge badge-danger" title="${res.error || 'Unknown Error'}">Die</span>`;
+    }
 
     // Active Navigation State
     function switchTab(tabId, el) {
@@ -2167,7 +2185,7 @@
             <td style="font-variant-numeric: tabular-nums;">${parseInt(m.context).toLocaleString()}</td>
             <td>${capStr}</td>
             <td id="status-model-${m.id.replace(/\./g, '-')}" style="font-variant-numeric: tabular-nums;">
-              <span class="badge badge-warning" style="background: rgba(156,163,175,0.1); color: var(--text-secondary); border: 1px solid rgba(156,163,175,0.2);">Not Tested</span>
+              ${getModelStatusHTML(m.id)}
             </td>
             <td style="text-align: right; white-space: nowrap;">
               <button class="btn btn-secondary btn-sm" style="margin-right:6px;" onclick="copyToClipboard('${m.id}')">Copy ID</button>
@@ -2190,7 +2208,7 @@
             <td>—</td>
             <td><span class="badge badge-success" style="background: rgba(59,130,246,0.15); color: #60a5fa; border: 1px solid rgba(59,130,246,0.2); font-size:10px;">Custom Route</span></td>
             <td id="status-model-${aliasKey.replace(/\./g, '-')}" style="font-variant-numeric: tabular-nums;">
-              <span class="badge badge-warning" style="background: rgba(156,163,175,0.1); color: var(--text-secondary); border: 1px solid rgba(156,163,175,0.2);">Not Tested</span>
+              ${getModelStatusHTML(aliasKey)}
             </td>
             <td style="text-align: right; white-space: nowrap;">
               <button class="btn btn-secondary btn-sm" style="margin-right:6px;" onclick="copyToClipboard('${aliasKey}')">Copy ID</button>
@@ -2226,8 +2244,12 @@
       const statusCell = document.getElementById(`status-model-${escapedId}`);
       const btn = document.getElementById(`btn-test-${escapedId}`);
       
-      if (!statusCell) return;
-      statusCell.innerHTML = `<span class="badge badge-warning">Testing...</span>`;
+      if (statusCell) {
+        statusCell.innerHTML = `<span class="badge badge-warning">Testing...</span>`;
+      }
+      modelTestResults[modelId] = { status: 'testing' };
+      sessionStorage.setItem('modelTestResults', JSON.stringify(modelTestResults));
+      
       if (btn) btn.disabled = true;
 
       try {
@@ -2240,8 +2262,9 @@
           body: JSON.stringify({ model: modelId })
         });
         if (r.status === 401) {
-          showToast("Invalid admin token", "error");
-          statusCell.innerHTML = `<span class="badge badge-danger">Auth Failed</span>`;
+          modelTestResults[modelId] = { status: 'auth_failed' };
+          sessionStorage.setItem('modelTestResults', JSON.stringify(modelTestResults));
+          if (statusCell) statusCell.innerHTML = getModelStatusHTML(modelId);
           if (btn) btn.disabled = false;
           return;
         }
@@ -2249,16 +2272,15 @@
         const res = await r.json();
         
         if (res.status === 'live') {
-          statusCell.innerHTML = `<span class="badge badge-success" style="font-variant-numeric: tabular-nums;">Live (${res.latency_ms}ms)</span>`;
-          showToast(`Model ${modelId} is live! Latency: ${res.latency_ms}ms`, "success");
+          modelTestResults[modelId] = { status: 'live', latency_ms: res.latency_ms };
         } else {
-          statusCell.innerHTML = `<span class="badge badge-danger" title="${res.error || 'Unknown Error'}">Die</span>`;
-          showToast(`Model ${modelId} check failed: ${res.error || 'Unknown Error'}`, "error");
+          modelTestResults[modelId] = { status: 'die', error: res.error || 'Unknown Error' };
         }
       } catch (e) {
-        statusCell.innerHTML = `<span class="badge badge-danger" title="${e.message}">Error</span>`;
-        showToast(`Test failed: ${e.message}`, "error");
+        modelTestResults[modelId] = { status: 'error', error: e.message };
       } finally {
+        sessionStorage.setItem('modelTestResults', JSON.stringify(modelTestResults));
+        if (statusCell) statusCell.innerHTML = getModelStatusHTML(modelId);
         if (btn) btn.disabled = false;
       }
     }
