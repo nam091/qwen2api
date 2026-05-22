@@ -2138,26 +2138,26 @@
     }
 
     const STANDARD_MODELS = [
-      { id: "qwen3.6-plus", name: "Qwen3.6-Plus", modality: "text, image, video, audio", context: "1,000,000", thinking: "yes (auto)", search: "yes" },
-      { id: "qwen3.6-max-preview", name: "Qwen3.6-Max-Preview", modality: "text", context: "262,144", thinking: "yes", search: "no" },
-      { id: "qwen3.6-27b", name: "Qwen3.6-27B", modality: "text, image, video", context: "262,144", thinking: "yes", search: "no" },
-      { id: "qwen3.6-35b-a3b", name: "Qwen3.6-35B-A3B", modality: "text, image, video, audio", context: "262,144", thinking: "yes (auto)", search: "yes" },
-      { id: "qwen3.6-plus-preview", name: "Qwen3.6-Plus-Preview", modality: "text", context: "1,000,000", thinking: "yes", search: "no" },
-      { id: "qwen3.5-plus", name: "Qwen3.5-Plus", modality: "text, image, video, audio", context: "1,000,000", thinking: "yes (auto)", search: "yes" },
-      { id: "qwen3.5-flash", name: "Qwen3.5-Flash", modality: "text, image, video, audio", context: "1,000,000", thinking: "yes", search: "yes" },
-      { id: "qwen3.5-max-2026-03-08", name: "Qwen3.5-Max-Preview", modality: "text", context: "262,144", thinking: "yes", search: "no" },
-      { id: "qwen3.5-omni-plus", name: "Qwen3.5-Omni-Plus", modality: "text, image, video, audio", context: "262,144", thinking: "no", search: "no" },
-      { id: "qwen3.5-omni-flash", name: "Qwen3.5-Omni-Flash", modality: "text, image, video, audio", context: "262,144", thinking: "no", search: "no" },
-      { id: "qwen3.5-397b-a17b", name: "Qwen3.5-397B-A17B", modality: "text, image, video, audio", context: "262,144", thinking: "yes", search: "yes" },
-      { id: "qwen3.5-122b-a10b", name: "Qwen3.5-122B-A10B", modality: "text, image, video, audio", context: "262,144", thinking: "yes", search: "yes" },
-      { id: "qwen3.5-27b", name: "Qwen3.5-27B", modality: "text, image, video, audio", context: "262,144", thinking: "yes", search: "yes" },
-      { id: "qwen3.5-35b-a3b", name: "Qwen3.5-35B-A3B", modality: "text, image, video, audio", context: "262,144", thinking: "yes", search: "yes" },
-      { id: "qwen3-max-2026-01-23", name: "Qwen3-Max", modality: "text", context: "262,144", thinking: "yes", search: "yes" },
-      { id: "qwen3-coder-plus", name: "Qwen3-Coder", modality: "text", context: "1,048,576", thinking: "no", search: "no" },
-      { id: "qwen3-vl-plus", name: "Qwen3-VL-235B-A22B", modality: "text, image, video", context: "262,144", thinking: "yes", search: "no" },
-      { id: "qwen3-omni-flash-2025-12-01", name: "Qwen3-Omni-Flash", modality: "text, image, video, audio", context: "65,536", thinking: "yes", search: "no" },
-      { id: "qwen-plus-2025-07-28", name: "Qwen3-235B-A22B-2507", modality: "text", context: "131,072", thinking: "yes", search: "no" },
-      { id: "qwen-max-latest", name: "Qwen2.5-Max", modality: "text", context: "131,072", thinking: "yes", search: "no" }
+      { id: "qwen3.6-plus", name: "Qwen3.6-Plus", modality: "text, image, video, audio", context: "128K", thinking: "yes (auto)", search: "yes" },
+      { id: "qwen3.6-max-preview", name: "Qwen3.6-Max-Preview", modality: "text", context: "128K", thinking: "yes", search: "no" },
+      { id: "qwen3.6-27b", name: "Qwen3.6-27B", modality: "text, image, video", context: "128K", thinking: "yes", search: "no" },
+      { id: "qwen3.6-35b-a3b", name: "Qwen3.6-35B-A3B", modality: "text, image, video, audio", context: "128K", thinking: "yes (auto)", search: "yes" },
+      { id: "qwen3.6-plus-preview", name: "Qwen3.6-Plus-Preview", modality: "text", context: "128K", thinking: "yes", search: "no" },
+      { id: "qwen3.5-plus", name: "Qwen3.5-Plus", modality: "text, image, video, audio", context: "128K", thinking: "yes (auto)", search: "yes" },
+      { id: "qwen3.5-flash", name: "Qwen3.5-Flash", modality: "text, image, video, audio", context: "128K", thinking: "yes", search: "yes" },
+      { id: "qwen3.5-max-2026-03-08", name: "Qwen3.5-Max-Preview", modality: "text", context: "128K", thinking: "yes", search: "no" },
+      { id: "qwen3.5-omni-plus", name: "Qwen3.5-Omni-Plus", modality: "text, image, video, audio", context: "128K", thinking: "no", search: "no" },
+      { id: "qwen3.5-omni-flash", name: "Qwen3.5-Omni-Flash", modality: "text, image, video, audio", context: "128K", thinking: "no", search: "no" },
+      { id: "qwen3.5-397b-a17b", name: "Qwen3.5-397B-A17B", modality: "text, image, video, audio", context: "128K", thinking: "yes", search: "yes" },
+      { id: "qwen3.5-122b-a10b", name: "Qwen3.5-122B-A10B", modality: "text, image, video, audio", context: "128K", thinking: "yes", search: "yes" },
+      { id: "qwen3.5-27b", name: "Qwen3.5-27B", modality: "text, image, video, audio", context: "128K", thinking: "yes", search: "yes" },
+      { id: "qwen3.5-35b-a3b", name: "Qwen3.5-35B-A3B", modality: "text, image, video, audio", context: "128K", thinking: "yes", search: "yes" },
+      { id: "qwen3-max-2026-01-23", name: "Qwen3-Max", modality: "text", context: "128K", thinking: "yes", search: "yes" },
+      { id: "qwen3-coder-plus", name: "Qwen3-Coder", modality: "text", context: "128K", thinking: "no", search: "no" },
+      { id: "qwen3-vl-plus", name: "Qwen3-VL-235B-A22B", modality: "text, image, video", context: "128K", thinking: "yes", search: "no" },
+      { id: "qwen3-omni-flash-2025-12-01", name: "Qwen3-Omni-Flash", modality: "text, image, video, audio", context: "128K", thinking: "yes", search: "no" },
+      { id: "qwen-plus-2025-07-28", name: "Qwen3-235B-A22B-2507", modality: "text", context: "128K", thinking: "yes", search: "no" },
+      { id: "qwen-max-latest", name: "Qwen2.5-Max", modality: "text", context: "64K", thinking: "yes", search: "no" }
     ];
 
     function renderAvailableModels() {
@@ -2180,7 +2180,7 @@
           <tr data-model-search="${m.id} ${m.name} ${m.modality}">
             <td style="font-weight:600;"><code style="font-family:var(--font-mono);color:var(--accent-color);">${m.id}</code></td>
             <td><span style="font-size:12px;opacity:0.85;">${m.modality}</span></td>
-            <td style="font-variant-numeric: tabular-nums;">${parseInt(m.context).toLocaleString()}</td>
+            <td style="font-variant-numeric: tabular-nums;">${m.context}</td>
             <td>${capStr}</td>
             <td id="status-model-${m.id.replace(/\./g, '-')}" style="font-variant-numeric: tabular-nums;">
               ${getModelStatusHTML(m.id)}
