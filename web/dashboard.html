@@ -1952,7 +1952,7 @@
       </div>
       <div class="form-group">
         <label>Requested Model Name (Alias) *</label>
-        <input type="text" id="aliasKey" placeholder="e.g. gpt-4-turbo">
+        <input type="text" id="aliasKey" list="cliModelList" placeholder="e.g. claude-3-7-sonnet-20250219">
       </div>
       <div class="form-group">
         <label>Real Upstream Target Model *</label>
@@ -3256,6 +3256,12 @@
     }
 
     const STANDARD_MODELS = [
+      { id: "claude-3-7-sonnet-20250219", name: "Claude 3.7 Sonnet (Auto-Routed)", modality: "text, image (Qwen)", context: "128K", thinking: "yes", search: "yes" },
+      { id: "claude-3.7-sonnet", name: "Claude 3.7 Sonnet (Auto-Routed)", modality: "text, image (Qwen)", context: "128K", thinking: "yes", search: "yes" },
+      { id: "claude-3-5-sonnet-20241022", name: "Claude 3.5 Sonnet (Auto-Routed)", modality: "text, image (Qwen)", context: "128K", thinking: "yes", search: "yes" },
+      { id: "claude-3.5-sonnet", name: "Claude 3.5 Sonnet (Auto-Routed)", modality: "text, image (Qwen)", context: "128K", thinking: "yes", search: "yes" },
+      { id: "claude-3-opus-20240229", name: "Claude 3 Opus (Auto-Routed)", modality: "text, image (Qwen)", context: "128K", thinking: "yes", search: "yes" },
+      { id: "claude-3-haiku-20240307", name: "Claude 3 Haiku (Auto-Routed)", modality: "text (Qwen)", context: "128K", thinking: "yes", search: "yes" },
       { id: "qwen3.6-plus", name: "Qwen3.6-Plus", modality: "text, image, video, audio", context: "128K", thinking: "yes (auto)", search: "yes" },
       { id: "qwen3.6-max-preview", name: "Qwen3.6-Max-Preview", modality: "text", context: "128K", thinking: "yes", search: "no" },
       { id: "qwen3.6-27b", name: "Qwen3.6-27B", modality: "text, image, video", context: "128K", thinking: "yes", search: "no" },
