@@ -1709,9 +1709,13 @@
       if (usageChart) {
         usageChart.data.labels = labels;
         usageChart.data.datasets[0].data = hitsData;
-        usageChart.data.datasets[0].backgroundColor = accentColor;
+        usageChart.data.datasets[0].borderColor = accentColor;
+        usageChart.data.datasets[0].backgroundColor = accentColor + '15';
+        usageChart.data.datasets[0].pointBackgroundColor = accentColor;
         usageChart.data.datasets[1].data = failuresData;
-        usageChart.data.datasets[1].backgroundColor = dangerColor;
+        usageChart.data.datasets[1].borderColor = dangerColor;
+        usageChart.data.datasets[1].backgroundColor = dangerColor + '15';
+        usageChart.data.datasets[1].pointBackgroundColor = dangerColor;
         usageChart.options.scales.x.grid.color = borderColor;
         usageChart.options.scales.y.grid.color = borderColor;
         usageChart.options.scales.x.ticks.color = textMuted;
@@ -1719,27 +1723,35 @@
         usageChart.update();
       } else {
         usageChart = new Chart(ctx, {
-          type: 'bar',
+          type: 'line',
           data: {
             labels: labels,
             datasets: [
               {
                 label: 'Success Hits',
                 data: hitsData,
-                backgroundColor: accentColor,
-                borderRadius: 6,
-                borderWidth: 0,
-                barPercentage: 0.5,
-                categoryPercentage: 0.6
+                borderColor: accentColor,
+                backgroundColor: accentColor + '15',
+                borderWidth: 2.5,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointBackgroundColor: accentColor,
+                pointBorderColor: 'transparent'
               },
               {
                 label: 'Failures',
                 data: failuresData,
-                backgroundColor: dangerColor,
-                borderRadius: 6,
-                borderWidth: 0,
-                barPercentage: 0.5,
-                categoryPercentage: 0.6
+                borderColor: dangerColor,
+                backgroundColor: dangerColor + '15',
+                borderWidth: 2.5,
+                tension: 0.4,
+                fill: true,
+                pointRadius: 3,
+                pointHoverRadius: 5,
+                pointBackgroundColor: dangerColor,
+                pointBorderColor: 'transparent'
               }
             ]
           },
