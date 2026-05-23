@@ -106,7 +106,7 @@ func StreamChunkToClaude(chunk openai.StreamChunk, isFirst bool) []StreamEvent {
 			// Emit content_block_start for text
 			events = append(events, StreamEvent{
 				Type:  "content_block_start",
-				Index: 0,
+				Index: intPtr(0),
 				ContentBlock: &ContentPart{
 					Type: "text",
 					Text: "",
@@ -116,7 +116,7 @@ func StreamChunkToClaude(chunk openai.StreamChunk, isFirst bool) []StreamEvent {
 		// Emit content_block_delta
 		events = append(events, StreamEvent{
 			Type:  "content_block_delta",
-			Index: 0,
+			Index: intPtr(0),
 			Delta: &ContentDelta{
 				Type: "text_delta",
 				Text: choice.Delta.Content,
@@ -130,7 +130,7 @@ func StreamChunkToClaude(chunk openai.StreamChunk, isFirst bool) []StreamEvent {
 			// New tool call - emit content_block_start
 			events = append(events, StreamEvent{
 				Type:  "content_block_start",
-				Index: i + 1,
+				Index: intPtr(i + 1),
 				ContentBlock: &ContentPart{
 					Type: "tool_use",
 					ID:   tc.ID,
@@ -142,7 +142,7 @@ func StreamChunkToClaude(chunk openai.StreamChunk, isFirst bool) []StreamEvent {
 			// Emit input_json_delta
 			events = append(events, StreamEvent{
 				Type:  "content_block_delta",
-				Index: i + 1,
+				Index: intPtr(i + 1),
 				Delta: &ContentDelta{
 					Type:        "input_json_delta",
 					PartialJSON: tc.Function.Arguments,
@@ -167,7 +167,7 @@ func StreamChunkToClaude(chunk openai.StreamChunk, isFirst bool) []StreamEvent {
 			// Emit content_block_stop
 			events = append(events, StreamEvent{
 				Type:  "content_block_stop",
-				Index: 0,
+				Index: intPtr(0),
 			})
 			// Emit message_delta
 			events = append(events, StreamEvent{
@@ -231,7 +231,7 @@ func (sc *StreamConverter) Convert(chunk openai.StreamChunk) []StreamEvent {
 			sc.textStarted = true
 			events = append(events, StreamEvent{
 				Type:  "content_block_start",
-				Index: 0,
+				Index: intPtr(0),
 				ContentBlock: &ContentPart{
 					Type: "text",
 					Text: "",
@@ -241,7 +241,7 @@ func (sc *StreamConverter) Convert(chunk openai.StreamChunk) []StreamEvent {
 		// Emit content_block_delta
 		events = append(events, StreamEvent{
 			Type:  "content_block_delta",
-			Index: 0,
+			Index: intPtr(0),
 			Delta: &ContentDelta{
 				Type: "text_delta",
 				Text: choice.Delta.Content,
@@ -256,7 +256,7 @@ func (sc *StreamConverter) Convert(chunk openai.StreamChunk) []StreamEvent {
 			sc.toolsStarted[idx] = true
 			events = append(events, StreamEvent{
 				Type:  "content_block_start",
-				Index: idx,
+				Index: intPtr(idx),
 				ContentBlock: &ContentPart{
 					Type: "tool_use",
 					ID:   tc.ID,
@@ -267,7 +267,7 @@ func (sc *StreamConverter) Convert(chunk openai.StreamChunk) []StreamEvent {
 		if tc.Function.Arguments != "" {
 			events = append(events, StreamEvent{
 				Type:  "content_block_delta",
-				Index: idx,
+				Index: intPtr(idx),
 				Delta: &ContentDelta{
 					Type:        "input_json_delta",
 					PartialJSON: tc.Function.Arguments,
@@ -293,14 +293,14 @@ func (sc *StreamConverter) Convert(chunk openai.StreamChunk) []StreamEvent {
 			if sc.textStarted {
 				events = append(events, StreamEvent{
 					Type:  "content_block_stop",
-					Index: 0,
+					Index: intPtr(0),
 				})
 			}
 			// Emit content_block_stop for any tools that started
 			for idx := range sc.toolsStarted {
 				events = append(events, StreamEvent{
 					Type:  "content_block_stop",
-					Index: idx,
+					Index: intPtr(idx),
 				})
 			}
 			// Emit message_delta

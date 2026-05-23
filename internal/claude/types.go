@@ -145,22 +145,85 @@ type Usage struct {
 
 // StreamEvent is one SSE event in streaming mode.
 type StreamEvent struct {
-	Type string `json:"type"`
+	Type string `json:"-"`
 
 	// For message_start
-	Message *MessagesResponse `json:"message,omitempty"`
+	Message *MessagesResponse `json:"-"`
 
-	// For content_block_start
-	Index        int          `json:"index,omitempty"`
-	ContentBlock *ContentPart `json:"content_block,omitempty"`
+	// For content_block_start / content_block_stop / content_block_delta
+	Index        *int         `json:"-"`
+	ContentBlock *ContentPart `json:"-"`
 
 	// For content_block_delta
-	Delta *ContentDelta `json:"delta,omitempty"`
+	Delta *ContentDelta `json:"-"`
 
 	// For message_delta
-	Delta2 *MessageDelta `json:"delta,omitempty"`
-	Usage  *Usage        `json:"usage,omitempty"`
+	Delta2 *MessageDelta `json:"-"`
+	Usage  *Usage        `json:"-"`
 }
+
+// MarshalJSON produces the correct JSON shape for each event type.
+func (e StreamEvent) MarshalJSON() ([]byte, error) {
+	switch e.Type {
+	case "message_start":
+		return json.Marshal(struct {
+			Type    string           `json:"type"`
+			Message *MessagesResponse `json:"message"`
+		}{Type: e.Type, Message: e.Message})
+
+	case "content_block_start":
+		idx := 0
+		if e.Index != nil {
+			idx = *e.Index
+		}
+		return json.Marshal(struct {
+			Type         string       `json:"type"`
+			Index        int          `json:"index"`
+			ContentBlock *ContentPart `json:"content_block"`
+		}{Type: e.Type, Index: idx, ContentBlock: e.ContentBlock})
+
+	case "content_block_delta":
+		idx := 0
+		if e.Index != nil {
+			idx = *e.Index
+		}
+		return json.Marshal(struct {
+			Type  string        `json:"type"`
+			Index int           `json:"index"`
+			Delta *ContentDelta `json:"delta"`
+		}{Type: e.Type, Index: idx, Delta: e.Delta})
+
+	case "content_block_stop":
+		idx := 0
+		if e.Index != nil {
+			idx = *e.Index
+		}
+		return json.Marshal(struct {
+			Type  string `json:"type"`
+			Index int    `json:"index"`
+		}{Type: e.Type, Index: idx})
+
+	case "message_delta":
+		return json.Marshal(struct {
+			Type  string       `json:"type"`
+			Delta *MessageDelta `json:"delta"`
+			Usage *Usage       `json:"usage,omitempty"`
+		}{Type: e.Type, Delta: e.Delta2, Usage: e.Usage})
+
+	case "message_stop":
+		return json.Marshal(struct {
+			Type string `json:"type"`
+		}{Type: e.Type})
+
+	default:
+		return json.Marshal(struct {
+			Type string `json:"type"`
+		}{Type: e.Type})
+	}
+}
+
+// intPtr is a helper to create *int values for StreamEvent.Index.
+func intPtr(i int) *int { return &i }
 
 // ContentDelta is incremental content in streaming.
 type ContentDelta struct {
