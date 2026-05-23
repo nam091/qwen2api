@@ -637,11 +637,13 @@ func (h *handlers) proxyStreamDirect(w http.ResponseWriter, body io.Reader, id s
 	}
 
 	emit := func(chunk openai.StreamChunk) {
-		raw, err := json.Marshal(chunk)
+		raw, err := marshalStreamChunk(chunk)
 		if err != nil {
 			return
 		}
-		fmt.Fprintf(w, "data: %s\n\n", raw)
+		_, _ = w.Write([]byte("data: "))
+		_, _ = w.Write(raw)
+		_, _ = w.Write([]byte("\n\n"))
 		flush()
 	}
 
@@ -726,11 +728,13 @@ func (h *handlers) proxyStreamWithToolDetection(w http.ResponseWriter, body io.R
 	}
 
 	emit := func(chunk openai.StreamChunk) {
-		raw, err := json.Marshal(chunk)
+		raw, err := marshalStreamChunk(chunk)
 		if err != nil {
 			return
 		}
-		fmt.Fprintf(w, "data: %s\n\n", raw)
+		_, _ = w.Write([]byte("data: "))
+		_, _ = w.Write(raw)
+		_, _ = w.Write([]byte("\n\n"))
 		flush()
 	}
 

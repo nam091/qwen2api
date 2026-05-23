@@ -3128,12 +3128,18 @@
     let autoscrollLogs = true;
 
     function connectLogStream() {
-      if (!adminToken) {
-        showToast("Admin authorization required to stream logs", "error");
-        showAuthOverlay();
+      if (!adminToken || adminToken === 'bypass') {
+        const statusEl = document.getElementById('logConnectionStatus');
+        if (statusEl) {
+          statusEl.textContent = 'Auth Required';
+          statusEl.className = 'badge badge-danger';
+        }
         return;
       }
-      if (logSource) return;
+      if (logSource) {
+        logSource.close();
+        logSource = null;
+      }
       
       const statusEl = document.getElementById('logConnectionStatus');
       if (statusEl) {
@@ -3141,13 +3147,21 @@
         statusEl.className = 'badge badge-warning';
       }
 
+      let retryCount = 0;
+      const maxRetries = 5;
+
       logSource = new EventSource(`/admin/logs/stream?api_key=${encodeURIComponent(adminToken)}`);
 
       logSource.addEventListener('connected', function() {
+        retryCount = 0;
         if (statusEl) {
           statusEl.textContent = 'Streaming Live';
           statusEl.className = 'badge badge-success';
         }
+      });
+
+      logSource.addEventListener('ping', function() {
+        // Keep-alive, no action needed
       });
 
       logSource.onmessage = function(event) {
@@ -3155,14 +3169,26 @@
           const entry = JSON.parse(event.data);
           appendLogEntry(entry);
         } catch (e) {
-          // Silent catch for ping and non-JSON items
+          // Silent catch for non-JSON items
         }
       };
 
       logSource.onerror = function(err) {
+        retryCount++;
+        if (retryCount > maxRetries) {
+          if (logSource) {
+            logSource.close();
+            logSource = null;
+          }
+          if (statusEl) {
+            statusEl.textContent = 'Connection Failed';
+            statusEl.className = 'badge badge-danger';
+          }
+          return;
+        }
         if (statusEl) {
-          statusEl.textContent = 'Disconnected (Retrying...)';
-          statusEl.className = 'badge badge-danger';
+          statusEl.textContent = `Reconnecting (${retryCount}/${maxRetries})...`;
+          statusEl.className = 'badge badge-warning';
         }
       };
     }

@@ -73,6 +73,9 @@ func New(deps Deps) http.Handler {
 		r.Post("/chat/completions", h.chatCompletions)
 		r.Post("/v1/embeddings", h.embeddings)
 		r.Post("/embeddings", h.embeddings)
+		// OpenAI Responses API
+		r.Post("/v1/responses", h.responses)
+		r.Post("/responses", h.responses)
 		// Claude API compatibility
 		r.Post("/anthropic/v1/messages", h.claudeMessages)
 	})
