@@ -98,6 +98,7 @@ func New(deps Deps) http.Handler {
 		r.Put("/admin/config/aliases", h.updateModelAliases)
 		r.Get("/admin/logs/stream", h.streamLogs)
 		r.Post("/admin/models/test", h.testModel)
+		r.Get("/admin/models/refresh", h.syncModelsHandler)
 		r.Get("/admin/tunnel/status", h.getTunnelStatus)
 		r.Post("/admin/tunnel/start", h.startTunnel)
 		r.Post("/admin/tunnel/stop", h.stopTunnel)

@@ -414,8 +414,41 @@ function render(d) {
     html += "</table></div>";
   }
 
+  html += "<div class='card'><h2>Sync Models</h2>";
+  html += "<p style='margin:0 0 10px 0;font-size:13px;color:#94a3b8'>Fetch latest model list from upstream</p>";
+  html += "<button id='btn-refresh-models' onclick='syncModels()' style='padding:10px 18px;background:#E56A4A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer'>Refresh Models</button>";
+  html += "<div id='refresh-result' style='margin-top:8px;font-size:12px;color:#94a3b8'></div></div>";
+
   root.innerHTML = html;
 }
+
+async function syncModels() {
+  const btn = document.getElementById('btn-refresh-models');
+  const result = document.getElementById('refresh-result');
+  if (!btn) return;
+  btn.disabled = true;
+  btn.textContent = 'Syncing...';
+  result.textContent = '';
+  try {
+    const r = await fetch('/admin/models/refresh');
+    const data = await r.json();
+    if (data.success) {
+      result.textContent = 'Refreshed: ' + data.count + ' models';
+      result.style.color = '#4ade80';
+      refresh();
+    } else {
+      result.textContent = 'Failed to refresh';
+      result.style.color = '#f87171';
+    }
+  } catch (e) {
+    result.textContent = 'Error: ' + e.message;
+    result.style.color = '#f87171';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Refresh Models';
+  }
+}
+
 refresh();
 setInterval(refresh, 5000);
 </script>

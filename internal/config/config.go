@@ -140,6 +140,10 @@ func Default() Config {
 			CheckIntervalSeconds: 300,
 			WarnBeforeSeconds:    3600,
 		},
+		ModelAliases: map[string]string{
+			// qwen3.7-plus doesn't exist upstream; map to closest variant.
+			"qwen3.7-plus": "qwen3.6-plus",
+		},
 	}
 }
 
@@ -230,6 +234,10 @@ func unmarshalConfig(raw []byte, cfg *Config) error {
 	rc.Config = *cfg
 	if err := json.Unmarshal(raw, &rc); err != nil {
 		return err
+	}
+	// Preserve defaults that JSON null would otherwise overwrite.
+	if rc.ModelAliases == nil {
+		rc.ModelAliases = cfg.ModelAliases
 	}
 	*cfg = rc.Config
 	if len(rc.APIKeys) == 0 {

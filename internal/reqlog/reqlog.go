@@ -40,17 +40,8 @@ type Logger struct {
 }
 
 // NewLogger opens or creates the log file at path.
+// If path is empty, the logger is broadcast-only (no file I/O).
 func NewLogger(path string, maxSizeMB, maxBackups, truncateLen int) (*Logger, error) {
-	if path == "" {
-		return nil, nil
-	}
-	if dir := filepath.Dir(path); dir != "." && dir != "" {
-		_ = os.MkdirAll(dir, 0o755)
-	}
-	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
-	if err != nil {
-		return nil, err
-	}
 	if maxSizeMB <= 0 {
 		maxSizeMB = 50
 	}
@@ -60,14 +51,24 @@ func NewLogger(path string, maxSizeMB, maxBackups, truncateLen int) (*Logger, er
 	if truncateLen <= 0 {
 		truncateLen = 2048
 	}
-	return &Logger{
-		file:        f,
+	l := &Logger{
 		path:        path,
 		maxSize:     int64(maxSizeMB) * 1024 * 1024,
 		maxBackups:  maxBackups,
 		truncateLen: truncateLen,
 		subscribers: make(map[chan Entry]bool),
-	}, nil
+	}
+	if path != "" {
+		if dir := filepath.Dir(path); dir != "." && dir != "" {
+			_ = os.MkdirAll(dir, 0o755)
+		}
+		f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
+		if err != nil {
+			return nil, err
+		}
+		l.file = f
+	}
+	return l, nil
 }
 
 // Log writes one entry, optionally to file, and always broadcasts to subscribers.

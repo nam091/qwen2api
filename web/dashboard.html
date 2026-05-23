@@ -1731,7 +1731,11 @@
               <h2>Available Models & Sandbox</h2>
               <p style="color: var(--text-secondary); font-size: 13px; margin-top: 4px;">Dynamic verification and integration of all upstream Qwen models & aliases.</p>
             </div>
-            <div>
+            <div style="display: flex; gap: 10px;">
+              <button class="btn btn-primary btn-shimmer" id="btn-refresh-models" onclick="syncModels()">
+                <span class="material-symbols-outlined" style="font-size: 16px; margin-right: 6px;">sync</span>
+                Refresh Models
+              </button>
               <button class="btn btn-primary" id="btn-test-all-models" onclick="testAllModelsSequentially()">
                 <span class="material-symbols-outlined" style="font-size: 16px; margin-right: 6px;">play_arrow</span>
                 Test Live One-by-One
@@ -4022,6 +4026,32 @@
           }
         }
       });
+    }
+
+    // syncModels fetches the latest model list from upstream and caches it server-side.
+    async function syncModels() {
+      const btn = document.getElementById('btn-refresh-models');
+      if (!btn) return;
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 16px; margin-right: 6px; animation: spin 1s linear infinite;">sync</span> Syncing...';
+      try {
+        const r = await fetch('/admin/models/refresh', {
+          headers: { 'Authorization': 'Bearer ' + adminToken }
+        });
+        const data = await r.json();
+        if (data.success) {
+          showToast('Models refreshed: ' + data.count + ' models fetched upstream', 'success');
+          // Re-fetch dashboard data to update model list display
+          if (typeof refresh === 'function') refresh();
+        } else {
+          showToast('Failed to refresh models', 'error');
+        }
+      } catch (e) {
+        showToast('Error refreshing models: ' + e.message, 'error');
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined" style="font-size: 16px; margin-right: 6px;">sync</span> Refresh Models';
+      }
     }
   </script>
 </body>

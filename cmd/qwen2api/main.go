@@ -70,14 +70,11 @@ func run() error {
 		metricsReg = metrics.New()
 	}
 
-	var reqLogger *reqlog.Logger
-	if cfg.Features.RequestLogging {
-		rl, err := reqlog.NewLogger(cfg.Logging.Path, cfg.Logging.MaxSizeMB, cfg.Logging.MaxBackups, cfg.Logging.TruncateLen)
-		if err != nil {
-			logger.Warn("request logging init failed", "err", err)
-		} else {
-			reqLogger = rl
-		}
+	// reqLogger always initialized for live log broadcasting (SSE).
+	// File I/O is controlled by cfg.Features.RequestLogging.
+	reqLogger, err := reqlog.NewLogger(cfg.Logging.Path, cfg.Logging.MaxSizeMB, cfg.Logging.MaxBackups, cfg.Logging.TruncateLen)
+	if err != nil {
+		logger.Warn("request logging init failed", "err", err)
 	}
 
 	// tokenHealthLoop runs unconditionally but checks Features.AutoTokenRefresh dynamically.
