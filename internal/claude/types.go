@@ -95,7 +95,7 @@ type ContentPart struct {
 	Type string `json:"type"`
 
 	// For type="text"
-	Text string `json:"text,omitempty"`
+	Text string `json:"-"` // custom marshal below
 
 	// For type="image"
 	Source *ImageSource `json:"source,omitempty"`
@@ -109,6 +109,34 @@ type ContentPart struct {
 	ToolUseID string `json:"tool_use_id,omitempty"`
 	Content   string `json:"content,omitempty"`
 	IsError   bool   `json:"is_error,omitempty"`
+}
+
+// MarshalJSON ensures "text" field is always present for text-type content blocks.
+func (cp ContentPart) MarshalJSON() ([]byte, error) {
+	type Alias ContentPart
+	if cp.Type == "text" {
+		return json.Marshal(struct {
+			Alias
+			Text string `json:"text"`
+		}{Alias: Alias(cp), Text: cp.Text})
+	}
+	return json.Marshal(struct {
+		Alias
+	}{Alias: Alias(cp)})
+}
+
+// UnmarshalJSON handles the text field which is tagged as json:"-".
+func (cp *ContentPart) UnmarshalJSON(data []byte) error {
+	type Alias ContentPart
+	aux := &struct {
+		*Alias
+		Text string `json:"text"`
+	}{Alias: (*Alias)(cp)}
+	if err := json.Unmarshal(data, aux); err != nil {
+		return err
+	}
+	cp.Text = aux.Text
+	return nil
 }
 
 // ImageSource describes an image in Claude format.
