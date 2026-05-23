@@ -15,6 +15,8 @@ type Entry struct {
 	Time      string `json:"time"`
 	RequestID string `json:"request_id"`
 	APIKey    string `json:"api_key,omitempty"`
+	Endpoint  string `json:"endpoint,omitempty"` // "chat" | "claude" | "responses" | "embeddings"
+	Path      string `json:"path,omitempty"`
 	Model     string `json:"model"`
 	Token     string `json:"token,omitempty"`
 	Status    int    `json:"status"`

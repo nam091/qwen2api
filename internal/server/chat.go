@@ -53,7 +53,7 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	req.Messages = h.applyTopicIsolation(req.Messages)
 
 	req.Model = h.deps.Config.ResolveModel(req.Model)
-	upstreamReq := buildQwenRequestWithOptions(req, h.deps.Config.Features.Multimodal)
+	upstreamReq := buildQwenRequestFull(req, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 
 	maxAttempts := 1
 	if h.deps.Config.Features.RetryOnTokenFailure && h.deps.Config.Retry.MaxAttempts > 1 {
@@ -225,7 +225,7 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		for attempt := 2; attempt <= continuationAttempts && truncated; attempt++ {
 			retries++
 			contReq := buildContinuationRequest(req, fullContent)
-			contUpstreamReq := buildQwenRequestWithOptions(contReq, h.deps.Config.Features.Multimodal)
+			contUpstreamReq := buildQwenRequestFull(contReq, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 			contUpstreamReq.ChatID = upstreamReq.ChatID
 			contBody, contErr := h.deps.Qwen.Completions(r.Context(), token.Value, contUpstreamReq)
 			if contErr != nil {
@@ -265,12 +265,21 @@ func (h *handlers) metricsObserve(name string, v float64) {
 }
 
 func (h *handlers) logRequest(r *http.Request, req openai.ChatRequest, token string, status int, latency time.Duration, cacheHit bool, retries int, err error) {
+	h.logRequestEndpoint(r, req, "chat", token, status, latency, cacheHit, retries, err)
+}
+
+// logRequestEndpoint is like logRequest but also captures which logical
+// endpoint (chat/claude/responses) handled the request, so the dashboard
+// live log can distinguish them.
+func (h *handlers) logRequestEndpoint(r *http.Request, req openai.ChatRequest, endpoint, token string, status int, latency time.Duration, cacheHit bool, retries int, err error) {
 	if h.deps.ReqLog == nil {
 		return
 	}
 	entry := reqlog.Entry{
 		RequestID: r.Header.Get("X-Request-Id"),
 		APIKey:    reqlog.MaskKey(bearerOrQuery(r)),
+		Endpoint:  endpoint,
+		Path:      r.URL.Path,
 		Model:     req.Model,
 		Token:     reqlog.MaskKey(token),
 		Status:    status,
@@ -331,12 +340,24 @@ func buildQwenRequest(req openai.ChatRequest) qwen.CompletionRequest {
 }
 
 func buildQwenRequestWithOptions(req openai.ChatRequest, multimodalEnabled bool) qwen.CompletionRequest {
+	return buildQwenRequestFull(req, multimodalEnabled, "auto")
+}
+
+// buildQwenRequestFull is the canonical builder; thinkingMode is "auto"/"on"/"off".
+func buildQwenRequestFull(req openai.ChatRequest, multimodalEnabled bool, thinkingMode string) qwen.CompletionRequest {
 	chatType := chatTypeFromModel(req.Model)
 	thinkingEnabled := false
-	if req.EnableThinking != nil {
-		thinkingEnabled = *req.EnableThinking
-	} else if strings.HasSuffix(req.Model, "-thinking") || strings.Contains(req.Model, "thinking") {
+	switch strings.ToLower(strings.TrimSpace(thinkingMode)) {
+	case "on", "always", "force_on", "true":
 		thinkingEnabled = true
+	case "off", "never", "force_off", "false":
+		thinkingEnabled = false
+	default: // "auto" / unset
+		if req.EnableThinking != nil {
+			thinkingEnabled = *req.EnableThinking
+		} else if strings.HasSuffix(req.Model, "-thinking") || strings.Contains(req.Model, "thinking") {
+			thinkingEnabled = true
+		}
 	}
 
 	// Upstream chat.qwen.ai only accepts a single user-role message per

@@ -43,6 +43,10 @@ type FeatureToggles struct {
 	TopicIsolation         bool `json:"topic_isolation"`
 	Tunnel                 bool `json:"tunnel"`
 	BrowserEngineFallback  bool `json:"browser_engine_fallback"`
+	// ThinkingMode controls whether upstream thinking is enabled.
+	// Values: "auto" (default — based on model name / client flag),
+	// "on" (force enable), "off" (force disable).
+	ThinkingMode string `json:"thinking_mode,omitempty"`
 }
 
 // CacheConfig configures the prompt cache.
@@ -113,7 +117,7 @@ func Default() Config {
 			ConnectionPooling:      true,
 			AutoTokenRefresh:       false,
 			Metrics:                true,
-			RequestLogging:         false,
+			RequestLogging:         true,
 			Dashboard:              true,
 			MultiFormatToolParsing: true,
 			Multimodal:             true,
@@ -122,6 +126,7 @@ func Default() Config {
 			APIKeyRotation:         false,
 			BrowserEngineFallback:  false,
 			Tunnel:                 true,
+			ThinkingMode:           "auto",
 		},
 		Cache: CacheConfig{
 			MaxEntries: 256,

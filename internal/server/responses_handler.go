@@ -70,7 +70,7 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	chatReq.Model = h.deps.Config.ResolveModel(chatReq.Model)
-	upstreamReq := buildQwenRequestWithOptions(chatReq, h.deps.Config.Features.Multimodal)
+	upstreamReq := buildQwenRequestFull(chatReq, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 
 	maxAttempts := 1
 	if h.deps.Config.Features.RetryOnTokenFailure && h.deps.Config.Retry.MaxAttempts > 1 {
@@ -88,6 +88,7 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			h.metricsInc("qwen2api_no_upstream_token_total")
 			writeError(w, http.StatusServiceUnavailable, "no_upstream_token", "no Qwen token configured")
+			h.logRequestEndpoint(r, chatReq, "responses", "", http.StatusServiceUnavailable, time.Since(start), false, retries, err)
 			return
 		}
 		token = t
@@ -100,6 +101,7 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			h.handleUpstreamFailure(w, token.Value, err, "create chat session")
+			h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, err)
 			return
 		}
 		upstreamReq.ChatID = chatID
@@ -112,6 +114,7 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			h.handleUpstreamFailure(w, token.Value, err, "open completion stream")
+			h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, err)
 			return
 		}
 		break
@@ -119,6 +122,7 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 
 	if body == nil {
 		writeError(w, http.StatusBadGateway, "upstream_error", "all retries exhausted")
+		h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, fmt.Errorf("all retries exhausted"))
 		return
 	}
 
@@ -130,17 +134,20 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 		defer func() { _ = body.Close() }()
 		h.proxyResponsesStream(w, body, responseID, createdAt, req.Model, hasTools)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
+		h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusOK, time.Since(start), false, retries, nil)
 		return
 	}
 
 	resp, _, _, err := h.collectResponsesCompletion(body, responseID, createdAt, req.Model, hasTools)
 	if err != nil {
 		h.handleUpstreamFailure(w, token.Value, err, "read completion stream (responses)")
+		h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, err)
 		return
 	}
 
 	writeJSON(w, http.StatusOK, resp)
 	h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
+	h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusOK, time.Since(start), false, retries, nil)
 }
 
 // convertResponsesInput converts Responses API input to ChatMessages.
@@ -450,11 +457,18 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 			Type:         "response.output_text.done",
 			OutputIndex:  0,
 			ContentIndex: 0,
+			ItemID:       msgID,
+			Text:         accumulated,
 		})
 		emitEvent("response.content_part.done", openai.ResponseStreamEvent{
 			Type:         "response.content_part.done",
 			OutputIndex:  0,
 			ContentIndex: 0,
+			ItemID:       msgID,
+			Part: &openai.ResponseContentBlock{
+				Type: "output_text",
+				Text: accumulated,
+			},
 		})
 		emitEvent("response.output_item.done", openai.ResponseStreamEvent{
 			Type:        "response.output_item.done",
@@ -472,9 +486,7 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 		})
 	}
 
-	// Emit response.completed
-	finalResp, _, _, _ := h.collectResponsesCompletion(io.NopCloser(strings.NewReader("")), id, created, model, hasTools)
-	// Rebuild from accumulated content since we already consumed the stream
+	// Build the final output from the content we already accumulated.
 	var finalOutput []openai.ResponseOutputItem
 	if hasTools {
 		result := toolcall.ParseWithFormats(accumulated, h.deps.Config.Features.MultiFormatToolParsing)
@@ -525,8 +537,6 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 			}},
 		})
 	}
-
-	_ = finalResp // suppress unused warning
 
 	emitEvent("response.completed", openai.ResponseStreamEvent{
 		Type: "response.completed",

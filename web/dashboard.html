@@ -609,6 +609,18 @@
   input:checked + .slider { background-color: var(--accent-color); }
   input:checked + .slider:before { transform: translateX(22px); }
 
+  .thinking-select {
+    background: var(--bg-surface-2, #1e1e1e);
+    color: var(--text-primary, #e8e8e8);
+    border: 1px solid var(--border-active, #444);
+    border-radius: 6px;
+    padding: 6px 10px;
+    font-size: 13px;
+    cursor: pointer;
+    min-width: 180px;
+  }
+  .thinking-select:focus { outline: none; border-color: var(--accent-color); }
+
   /* BADGES */
   .badge {
     display: inline-flex;
@@ -2724,21 +2736,59 @@
       let html = '';
       sortedKeys.forEach(k => {
         const label = k.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
-        const isChecked = features[k] ? 'checked' : '';
+        const val = features[k];
+        let control;
+        if (typeof val === 'string') {
+          // String feature → render as dropdown. Currently only thinking_mode.
+          const options = (k === 'thinking_mode')
+            ? [['auto', 'Auto (based on model)'], ['on', 'Always On'], ['off', 'Always Off']]
+            : [[val, val]];
+          control = `
+            <select class="thinking-select" onchange="setStringFeature('${k}', this.value)">
+              ${options.map(([v, lbl]) => `<option value="${v}" ${v === val ? 'selected' : ''}>${lbl}</option>`).join('')}
+            </select>
+          `;
+        } else {
+          const isChecked = val ? 'checked' : '';
+          control = `
+            <label class="toggle-switch">
+              <input type="checkbox" ${isChecked} onchange="toggleFeatureItem('${k}', this.checked)">
+              <span class="slider"></span>
+            </label>
+          `;
+        }
         html += `
           <div class="switch-card">
             <div class="switch-info">
               <div class="switch-name">${label}</div>
               <div class="switch-desc">${getFeatureDesc(k)}</div>
             </div>
-            <label class="toggle-switch">
-              <input type="checkbox" ${isChecked} onchange="toggleFeatureItem('${k}', this.checked)">
-              <span class="slider"></span>
-            </label>
+            ${control}
           </div>
         `;
       });
       container.innerHTML = html;
+    }
+
+    async function setStringFeature(key, value) {
+      const updated = { ...currentData.features };
+      updated[key] = value;
+      try {
+        const r = await fetch('/admin/config/features', {
+          method: 'PUT',
+          headers: {
+            'Authorization': 'Bearer ' + adminToken,
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(updated)
+        });
+        if (!r.ok) throw new Error("HTTP " + r.status);
+        showToast(`Feature ${key} set to ${value}`, "success");
+        refresh();
+      } catch (e) {
+        showToast("Failed to update feature: " + e.message, "error");
+        refresh();
+      }
     }
 
     function getFeatureDesc(k) {
@@ -2757,7 +2807,10 @@
         'api_key_rotation': 'Allows token key rotation and granular credentials.',
         'session_affinity': 'Direct consecutive requests to matching active threads.',
         'file_cache': 'Stores binary elements and configurations securely on disk.',
-        'topic_isolation': 'Runs dynamic topics inside separate partitions.'
+        'topic_isolation': 'Runs dynamic topics inside separate partitions.',
+        'thinking_mode': 'Controls upstream <think> phase: Auto / Always On (always show reasoning) / Always Off.',
+        'tunnel': 'Run cloudflared tunnel to expose the API publicly.',
+        'browser_engine_fallback': 'Use headless browser fallback when upstream blocks requests.'
       };
       return descs[k] || 'Configure and toggle behavior in real time.';
     }
@@ -3220,19 +3273,14 @@
     let autoscrollLogs = true;
 
     function connectLogStream() {
-      if (!adminToken || adminToken === 'bypass') {
-        const statusEl = document.getElementById('logConnectionStatus');
-        if (statusEl) {
-          statusEl.textContent = 'Auth Required';
-          statusEl.className = 'badge badge-danger';
-        }
-        return;
-      }
+      // Admin auth is currently bypassed server-side, so we always attempt the
+      // stream connection. If the server later starts requiring a token, the
+      // EventSource will fail and `onerror` below will surface the issue.
       if (logSource) {
         logSource.close();
         logSource = null;
       }
-      
+
       const statusEl = document.getElementById('logConnectionStatus');
       if (statusEl) {
         statusEl.textContent = 'Connecting...';
@@ -3242,7 +3290,9 @@
       let retryCount = 0;
       const maxRetries = 5;
 
-      logSource = new EventSource(`/admin/logs/stream?api_key=${encodeURIComponent(adminToken)}`);
+      // Always pass a token so server-side auth (if enabled) accepts the request.
+      const tok = (adminToken && adminToken !== 'bypass') ? adminToken : 'bypass';
+      logSource = new EventSource(`/admin/logs/stream?api_key=${encodeURIComponent(tok)}`);
 
       logSource.addEventListener('connected', function() {
         retryCount = 0;
@@ -3316,6 +3366,16 @@
       }
     }
 
+    function escapeHtml(s) {
+      if (s == null) return '';
+      return String(s)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
     function appendLogEntry(e) {
       const consoleEl = document.getElementById('terminalConsole');
       if (!consoleEl) return;
@@ -3327,9 +3387,21 @@
                                'color: var(--color-success); font-weight: bold;';
 
       const streamBadge = e.stream ? '<span style="color: #9876aa;">[STREAM]</span>' : '<span style="color: #ffc66d;">[POST]</span>';
+      const endpointColor = {
+        'chat': '#6dc1ff',
+        'claude': '#d19a66',
+        'responses': '#98c379',
+        'embeddings': '#c678dd'
+      }[e.endpoint] || '#888';
+      const endpointBadge = e.endpoint
+        ? `<span style="color: ${endpointColor}; font-weight: 600;">[${e.endpoint.toUpperCase()}]</span>`
+        : '';
+      const toolsBadge = e.has_tools ? '<span style="color: #e5c07b;">(TOOLS)</span>' : '';
       const cacheBadge = e.cache_hit ? '<span style="color: #507850; font-weight: 500;">(CACHE HIT)</span>' : '';
-      const errText = e.error ? `<span style="color: var(--color-danger);">ERR: ${e.error}</span>` : '';
-      const reqIdSnippet = e.request_id ? `${e.request_id.substring(0, 8)}...` : 'unknown';
+      const retryBadge = e.retries ? `<span style="color: #d19a66;">retries=${e.retries}</span>` : '';
+      const errText = e.error ? `<span style="color: var(--color-danger);">ERR: ${escapeHtml(e.error)}</span>` : '';
+      const reqIdSnippet = e.request_id ? `${e.request_id.substring(0, 8)}...` : '-';
+      const tokenLabel = e.token ? `<span style="color: #808080;">tok=</span><span style="color: #56b6c2;">${escapeHtml(e.token)}</span>` : '';
 
       const logLine = document.createElement('div');
       logLine.className = 'log-line';
@@ -3339,12 +3411,16 @@
       
       logLine.innerHTML = `
         <span style="color: var(--text-muted); font-size: 11px;">[${timeStr}]</span>
-        <span style="color: var(--accent-color); font-weight: 500;">${reqIdSnippet}</span>
+        ${endpointBadge}
         ${streamBadge}
-        <span style="color: #808080;">model=</span><span style="color: #ffc66d; font-weight: 500;">${e.model}</span>
+        <span style="color: var(--accent-color); font-weight: 500;">${reqIdSnippet}</span>
+        <span style="color: #808080;">model=</span><span style="color: #ffc66d; font-weight: 500;">${escapeHtml(e.model || '')}</span>
         <span style="color: #808080;">status=</span><span style="${statusBadgeClass}">${e.status}</span>
         <span style="color: #808080;">latency=</span><span style="color: #2b90d9; font-variant-numeric: tabular-nums;">${e.latency_ms}ms</span>
+        ${tokenLabel}
+        ${toolsBadge}
         ${cacheBadge}
+        ${retryBadge}
         ${errText}
       `;
       
