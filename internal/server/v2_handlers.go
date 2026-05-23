@@ -417,7 +417,14 @@ function render(d) {
   html += "<div class='card'><h2>Sync Models</h2>";
   html += "<p style='margin:0 0 10px 0;font-size:13px;color:#94a3b8'>Fetch latest model list from upstream</p>";
   html += "<button id='btn-refresh-models' onclick='syncModels()' style='padding:10px 18px;background:#E56A4A;color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer'>Refresh Models</button>";
-  html += "<div id='refresh-result' style='margin-top:8px;font-size:12px;color:#94a3b8'></div></div>";
+  html += "<div id='refresh-result' style='margin-top:8px;font-size:12px;color:#94a3b8'></div>";
+  html += "<hr style='border:none;border-top:1px solid #334155;margin:16px 0'>";
+  html += "<p style='margin:0 0 8px 0;font-size:13px;color:#94a3b8'>Test a custom model ID</p>";
+  html += "<div style='display:flex;gap:8px'>";
+  html += "<input id='customModelInputEmbed' placeholder='e.g. qwen-latest-series-invite-beta-v16' style='flex:1;padding:8px 12px;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:12px;font-family:monospace'>";
+  html += "<button onclick='testCustomModel()' style='padding:8px 16px;background:#E56A4A;color:#fff;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer'>Test</button>";
+  html += "</div>";
+  html += "<div id='customModelResultEmbed' style='margin-top:8px;font-size:12px;color:#94a3b8'></div></div>";
 
   root.innerHTML = html;
 }
@@ -447,6 +454,22 @@ async function syncModels() {
     btn.disabled = false;
     btn.textContent = 'Refresh Models';
   }
+}
+
+async function testCustomModel() {
+  const input = document.getElementById('customModelInputEmbed');
+  const result = document.getElementById('customModelResultEmbed');
+  if (!input || !result) return;
+  const modelId = input.value.trim();
+  if (!modelId) { result.textContent = 'Enter a model ID'; return; }
+  result.textContent = 'Testing...';
+  result.style.color = '#fbbf24';
+  try {
+    const r = await fetch('/admin/models/test', { method: 'POST', body: JSON.stringify({model:modelId}) });
+    const d = await r.json();
+    if (d.status === 'live') { result.textContent = 'LIVE (' + d.latency_ms + 'ms)'; result.style.color = '#4ade80'; }
+    else { result.textContent = 'DIE: ' + d.error; result.style.color = '#f87171'; }
+  } catch (e) { result.textContent = 'Error: ' + e.message; result.style.color = '#f87171'; }
 }
 
 refresh();

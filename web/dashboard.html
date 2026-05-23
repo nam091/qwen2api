@@ -1748,6 +1748,21 @@
             <input type="text" id="modelSearchInput" oninput="filterAvailableModels()" placeholder="Search models by ID, name, features, modality...">
           </div>
 
+          <!-- Custom Model Tester -->
+          <div style="display:flex; align-items:center; gap:12px; padding:12px 0 16px 0; border-bottom:1px solid var(--border-color); margin-bottom:16px;">
+            <div style="position:relative; flex:1;">
+              <span class="material-symbols-outlined" style="position:absolute; left:12px; top:50%; transform:translateY(-50%); font-size:18px; color:var(--text-muted);">science</span>
+              <input type="text" id="customModelInput" placeholder="Enter any model ID to test (e.g. qwen-latest-series-invite-beta-v16)..."
+                style="width:100%; padding:10px 16px 10px 40px; border-radius:8px; border:1px solid var(--border-color); background:var(--bg-input); color:var(--text-primary); font-family:var(--font-mono); font-size:13px;"
+                onkeydown="if(event.key==='Enter') testCustomModel()">
+            </div>
+            <button class="btn btn-primary" id="btn-test-custom-model" onclick="testCustomModel()" style="white-space:nowrap; min-width:130px;">
+              <span class="material-symbols-outlined" style="font-size:16px; margin-right:6px;">play_arrow</span>
+              Test Model
+            </button>
+          </div>
+          <div id="customModelResult" style="display:none; margin-bottom:16px;"></div>
+
           <div style="overflow-x: auto;">
             <table>
               <thead>
@@ -1977,6 +1992,7 @@
     let cachedTokens = [];
     let adminToken = localStorage.getItem('adminToken') || '';
     const modelTestResults = JSON.parse(sessionStorage.getItem('modelTestResults') || '{}');
+    let customTestedModels = JSON.parse(localStorage.getItem('customTestedModels') || '[]');
 
     function getModelStatusHTML(modelId) {
       const res = modelTestResults[modelId];
@@ -2958,8 +2974,80 @@
       navigator.clipboard.writeText(val).then(() => {
         showToast("API Key copied to clipboard", "success");
       }).catch(err => {
-        showToast("Failed to copy key: " + err, "error");
+        showToast("Copy failed: " + err, "error");
       });
+    }
+
+    // customTestedModels: persist in localStorage
+    function saveCustomTestedModels() {
+      localStorage.setItem('customTestedModels', JSON.stringify(customTestedModels));
+    }
+
+    async function testCustomModel() {
+      const input = document.getElementById('customModelInput');
+      const resultDiv = document.getElementById('customModelResult');
+      const btn = document.getElementById('btn-test-custom-model');
+      if (!input || !resultDiv || !btn) return;
+      const modelId = input.value.trim();
+      if (!modelId) { showToast('Enter a model ID to test', 'warning'); return; }
+      if (!adminToken) { showToast('Admin auth required', 'error'); return; }
+
+      btn.disabled = true;
+      btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;margin-right:6px;animation:spin 1s linear infinite;">progress_activity</span> Testing...';
+      resultDiv.style.display = 'none';
+
+      try {
+        const r = await fetch('/admin/models/test', {
+          method: 'POST',
+          headers: { 'Authorization': 'Bearer ' + adminToken, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ model: modelId })
+        });
+        if (r.status === 401) { showToast('Invalid admin token', 'error'); return; }
+        const data = await r.json();
+
+        if (data.status === 'live') {
+          // Add to custom tested list if not already present
+          if (!customTestedModels.includes(modelId)) {
+            customTestedModels.push(modelId);
+            saveCustomTestedModels();
+          }
+          resultDiv.style.display = 'block';
+          resultDiv.style.background = 'rgba(34,197,94,0.1)';
+          resultDiv.style.border = '1px solid rgba(34,197,94,0.3)';
+          resultDiv.style.color = '#4ade80';
+          resultDiv.innerHTML = `<strong>✓ LIVE</strong> — Model <code style="font-family:var(--font-mono);color:#4ade80;">${modelId}</code> responded in ${data.latency_ms}ms (added to list)`;
+          // also track in modelTestResults
+          modelTestResults[modelId] = { status: 'live', latency_ms: data.latency_ms };
+          sessionStorage.setItem('modelTestResults', JSON.stringify(modelTestResults));
+          renderAvailableModels();
+          showToast('Model ' + modelId + ' is LIVE (' + data.latency_ms + 'ms)', 'success');
+        } else {
+          resultDiv.style.display = 'block';
+          resultDiv.style.background = 'rgba(239,68,68,0.1)';
+          resultDiv.style.border = '1px solid rgba(239,68,68,0.3)';
+          resultDiv.style.color = '#f87171';
+          resultDiv.innerHTML = `<strong>✗ DIE</strong> — Model <code style="font-family:var(--font-mono);color:#f87171;">${modelId}</code> error: ${data.error || 'Unknown'}`;
+          modelTestResults[modelId] = { status: 'die', error: data.error };
+          sessionStorage.setItem('modelTestResults', JSON.stringify(modelTestResults));
+        }
+      } catch (e) {
+        resultDiv.style.display = 'block';
+        resultDiv.style.background = 'rgba(239,68,68,0.1)';
+        resultDiv.style.border = '1px solid rgba(239,68,68,0.3)';
+        resultDiv.style.color = '#f87171';
+        resultDiv.innerHTML = `<strong>✗ ERROR</strong> — ${e.message}`;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = '<span class="material-symbols-outlined" style="font-size:16px;margin-right:6px;">play_arrow</span> Test Model';
+      }
+    }
+
+    function removeCustomModel(modelId) {
+      customTestedModels = customTestedModels.filter(id => id !== modelId);
+      saveCustomTestedModels();
+      delete modelTestResults[modelId];
+      sessionStorage.setItem('modelTestResults', JSON.stringify(modelTestResults));
+      renderAvailableModels();
     }
 
     function startEditApiKey(value, name, expiresAt) {
@@ -3362,6 +3450,30 @@
             <td style="text-align: right; white-space: nowrap;">
               <button class="btn btn-secondary btn-sm" style="margin-right:6px;" onclick="copyToClipboard('${aliasKey}')">Copy ID</button>
               <button class="btn btn-primary btn-sm" id="btn-test-${aliasKey.replace(/\./g, '-')}" onclick="testModelConnectivity('${aliasKey}')">Test</button>
+            </td>
+          </tr>
+        `;
+      });
+
+      // Custom Tested Models (from localStorage via testCustomModel)
+      customTestedModels.forEach(modelId => {
+        // skip if already shown as standard or alias
+        if (STANDARD_MODELS.some(m => m.id === modelId)) return;
+        if (aliases[modelId]) return;
+        const res = modelTestResults[modelId];
+        html += `
+          <tr data-model-search="${modelId} custom tested">
+            <td style="font-weight:600;"><code style="font-family:var(--font-mono);color:#a78bfa;">${modelId}</code></td>
+            <td><span style="font-size:12px;opacity:0.85;">—</span></td>
+            <td>—</td>
+            <td><span class="badge badge-success" style="background: rgba(167,139,250,0.15); color: #a78bfa; border: 1px solid rgba(167,139,250,0.2); font-size:10px;">Verified</span></td>
+            <td id="status-model-${modelId.replace(/\./g, '-')}" style="font-variant-numeric: tabular-nums;">
+              ${getModelStatusHTML(modelId)}
+            </td>
+            <td style="text-align: right; white-space: nowrap;">
+              <button class="btn btn-secondary btn-sm" style="margin-right:6px;" onclick="copyToClipboard('${modelId}')">Copy ID</button>
+              <button class="btn btn-primary btn-sm" onclick="testModelConnectivity('${modelId}')">Test</button>
+              <button class="btn btn-danger btn-sm" onclick="removeCustomModel('${modelId}')" title="Remove from list">✕</button>
             </td>
           </tr>
         `;
