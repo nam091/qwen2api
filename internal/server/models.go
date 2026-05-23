@@ -14,6 +14,8 @@ import (
 // Updated from upstream as of 2026-05-23.
 var staticModels = []string{
 	"qwen3.7-max",
+	"qwen-latest-series-invite-beta-v24", // Qwen3.7-Max-Preview
+	"qwen-latest-series-invite-beta-v16", // Qwen3.7-Plus-Preview
 	"qwen3.6-plus",
 	"qwen3.6-max-preview",
 	"qwen3.6-27b",
@@ -34,8 +36,6 @@ var staticModels = []string{
 	"qwen3-vl-plus",
 	"qwen3-omni-flash-2025-12-01",
 	"qwen-max-latest",
-	"qwen-latest-series-invite-beta-v24",
-	"qwen-latest-series-invite-beta-v16",
 }
 
 // syncedModels holds models fetched via /admin/models/refresh (thread-safe).

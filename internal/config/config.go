@@ -141,8 +141,10 @@ func Default() Config {
 			WarnBeforeSeconds:    3600,
 		},
 		ModelAliases: map[string]string{
-			// qwen3.7-plus doesn't exist upstream; map to closest variant.
-			"qwen3.7-plus": "qwen3.6-plus",
+			// qwen3.7-plus: upstream has 3.7-Plus-Preview under internal ID.
+			"qwen3.7-plus":         "qwen-latest-series-invite-beta-v16",
+			"qwen3.7-plus-preview": "qwen-latest-series-invite-beta-v16",
+			"qwen3.7-max-preview":  "qwen-latest-series-invite-beta-v24",
 		},
 	}
 }
