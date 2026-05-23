@@ -89,7 +89,7 @@ func (h *handlers) streamClaudeResponse(w http.ResponseWriter, body io.ReadClose
 	}
 
 	scanner := bufio.NewScanner(body)
-	isFirst := true
+	sc := claude.NewStreamConverter()
 
 	for scanner.Scan() {
 		line := scanner.Text()
@@ -107,8 +107,7 @@ func (h *handlers) streamClaudeResponse(w http.ResponseWriter, body io.ReadClose
 		}
 
 		// Convert to Claude events
-		events := claude.StreamChunkToClaude(chunk, isFirst)
-		isFirst = false
+		events := sc.Convert(chunk)
 
 		for _, event := range events {
 			eventJSON, err := json.Marshal(event)

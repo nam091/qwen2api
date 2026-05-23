@@ -2,3 +2,20 @@
 {"time":"2026-05-22T09:57:45.0749974Z","request_id":"","api_key":"***","model":"qwen3.6-plus","token":"***","status":503,"latency_ms":0,"stream":false,"has_tools":false,"cache_hit":false,"error":"no Qwen token available"}
 {"time":"2026-05-22T09:59:30.9693149Z","request_id":"","api_key":"***","model":"qwen3.6-plus","token":"***","status":503,"latency_ms":0,"stream":false,"has_tools":false,"cache_hit":false,"error":"no Qwen token available"}
 {"time":"2026-05-22T10:01:44.1532688Z","request_id":"","api_key":"***","model":"qwen3.6-plus","token":"***","status":503,"latency_ms":0,"stream":false,"has_tools":false,"cache_hit":false,"error":"no Qwen token available"}
+{"time":"2026-05-23T10:02:54.2687108Z","request_id":"","api_key":"***","model":"qwen3.5-122b-a10b","token":"eyJh...EoMM","status":200,"latency_ms":1671,"stream":true,"has_tools":false,"cache_hit":false}
+{"time":"2026-05-23T10:02:55.7555157Z","request_id":"","api_key":"***","model":"qwen3.5-122b-a10b","token":"eyJh...EoMM","status":200,"latency_ms":1158,"stream":false,"has_tools":false,"cache_hit":true}
+{"time":"2026-05-23T10:02:57.2750079Z","request_id":"","api_key":"***","model":"qwen3.7-max","token":"eyJh...qtX4","status":200,"latency_ms":2704,"stream":true,"has_tools":false,"cache_hit":false}
+{"time":"2026-05-23T10:02:59.3695731Z","request_id":"","api_key":"***","model":"qwen3.7-max","token":"eyJh...qtX4","status":200,"latency_ms":1893,"stream":false,"has_tools":false,"cache_hit":true}
+{"time":"2026-05-23T10:03:07.6591135Z","request_id":"","api_key":"***","model":"qwen3-omni-flash-2025-12-01","token":"eyJh...EoMM","status":200,"latency_ms":1589,"stream":true,"has_tools":false,"cache_hit":false}
+{"time":"2026-05-23T10:03:08.8281672Z","request_id":"","api_key":"***","model":"qwen3-omni-flash-2025-12-01","token":"eyJh...EoMM","status":200,"latency_ms":927,"stream":false,"has_tools":false,"cache_hit":true}
+{"time":"2026-05-23T10:03:11.5555093Z","request_id":"","api_key":"***","model":"qwen3.5-flash","token":"eyJh...qtX4","status":200,"latency_ms":3923,"stream":true,"has_tools":false,"cache_hit":false}
+{"time":"2026-05-23T10:03:13.1356364Z","request_id":"","api_key":"***","model":"qwen3.5-flash","token":"eyJh...qtX4","status":200,"latency_ms":1384,"stream":false,"has_tools":false,"cache_hit":true}
+{"time":"2026-05-23T15:39:47.8843587Z","request_id":"","api_key":"***","model":"qwen3.6-plus-preview","token":"eyJh...EoMM","status":200,"latency_ms":20908,"stream":true,"has_tools":true,"cache_hit":false}
+{"time":"2026-05-23T15:40:15.1077068Z","request_id":"","api_key":"***","model":"qwen3.6-plus-preview","token":"eyJh...EoMM","status":200,"latency_ms":7792,"stream":true,"has_tools":true,"cache_hit":true}
+{"time":"2026-05-23T15:40:30.6666342Z","request_id":"","api_key":"***","model":"qwen3.6-plus-preview","token":"eyJh...qtX4","status":200,"latency_ms":40220,"stream":true,"has_tools":true,"cache_hit":false}
+{"time":"2026-05-23T15:40:34.3607619Z","request_id":"","api_key":"***","model":"qwen3.6-plus-preview","token":"eyJh...qtX4","status":200,"latency_ms":17342,"stream":true,"has_tools":true,"cache_hit":false}
+{"time":"2026-05-23T15:40:45.9114603Z","request_id":"","api_key":"***","model":"qwen3.6-plus-preview","token":"eyJh...qtX4","status":200,"latency_ms":9497,"stream":true,"has_tools":true,"cache_hit":false}
+{"time":"2026-05-23T15:41:01.4461948Z","request_id":"","api_key":"***","model":"qwen3.6-plus-preview","token":"eyJh...EoMM","status":200,"latency_ms":13004,"stream":true,"has_tools":true,"cache_hit":false}
+{"time":"2026-05-23T15:41:16.2462467Z","request_id":"","api_key":"***","model":"qwen3.6-plus-preview","token":"eyJh...qtX4","status":200,"latency_ms":11962,"stream":true,"has_tools":true,"cache_hit":false}
+{"time":"2026-05-23T15:42:13.2938992Z","request_id":"","api_key":"***","model":"qwen3.6-plus-preview","token":"eyJh...EoMM","status":200,"latency_ms":99808,"stream":true,"has_tools":true,"cache_hit":false}
+{"time":"2026-05-23T15:42:15.7232482Z","request_id":"","api_key":"***","model":"qwen3.6-plus-preview","token":"eyJh...EoMM","status":200,"latency_ms":57115,"stream":true,"has_tools":true,"cache_hit":false}

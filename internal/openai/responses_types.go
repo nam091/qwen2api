@@ -75,16 +75,11 @@ type ResponseUsage struct {
 
 // ResponseStreamEvent is an SSE event for streaming responses.
 type ResponseStreamEvent struct {
-	Type     string          `json:"type"`
-	Response *ResponseObject `json:"response,omitempty"`
-	Item     *ResponseOutputItem `json:"item,omitempty"`
-	Delta    *ResponseDelta  `json:"delta,omitempty"`
-	OutputIndex int          `json:"output_index,omitempty"`
-	ContentIndex int         `json:"content_index,omitempty"`
-}
-
-// ResponseDelta carries incremental text for streaming.
-type ResponseDelta struct {
-	Type string `json:"type"` // "output_text.delta"
-	Text string `json:"text"`
+	Type         string               `json:"type"`
+	Response     *ResponseObject      `json:"response,omitempty"`
+	Item         *ResponseOutputItem  `json:"item,omitempty"`
+	Part         *ResponseContentBlock `json:"part,omitempty"`
+	Delta        string               `json:"delta,omitempty"`
+	OutputIndex  int                  `json:"output_index,omitempty"`
+	ContentIndex int                  `json:"content_index,omitempty"`
 }

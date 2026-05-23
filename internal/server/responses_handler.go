@@ -339,6 +339,19 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 		},
 	})
 
+	// Emit response.in_progress
+	emitEvent("response.in_progress", openai.ResponseStreamEvent{
+		Type: "response.in_progress",
+		Response: &openai.ResponseObject{
+			ID:        id,
+			Object:    "response",
+			CreatedAt: created,
+			Status:    "in_progress",
+			Model:     model,
+			Output:    []openai.ResponseOutputItem{},
+		},
+	})
+
 	// Emit response.output_item.added for the message
 	msgID := "msg_" + uuid.NewString()
 	emitEvent("response.output_item.added", openai.ResponseStreamEvent{
@@ -349,6 +362,17 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 			ID:     msgID,
 			Status: "in_progress",
 			Role:   "assistant",
+		},
+	})
+
+	// Emit response.content_part.added
+	emitEvent("response.content_part.added", openai.ResponseStreamEvent{
+		Type:         "response.content_part.added",
+		OutputIndex:  0,
+		ContentIndex: 0,
+		Part: &openai.ResponseContentBlock{
+			Type: "output_text",
+			Text: "",
 		},
 	})
 
@@ -380,27 +404,21 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 		}
 		fullContent.WriteString(text)
 
-		emitEvent("response.content_part.delta", openai.ResponseStreamEvent{
-			Type:         "response.content_part.delta",
+		emitEvent("response.output_text.delta", openai.ResponseStreamEvent{
+			Type:         "response.output_text.delta",
 			OutputIndex:  0,
 			ContentIndex: contentIdx,
-			Delta: &openai.ResponseDelta{
-				Type: "output_text.delta",
-				Text: text,
-			},
+			Delta:        text,
 		})
 	}
 
 	if inThinking {
 		fullContent.WriteString("</think>")
-		emitEvent("response.content_part.delta", openai.ResponseStreamEvent{
-			Type:         "response.content_part.delta",
+		emitEvent("response.output_text.delta", openai.ResponseStreamEvent{
+			Type:         "response.output_text.delta",
 			OutputIndex:  0,
 			ContentIndex: contentIdx,
-			Delta: &openai.ResponseDelta{
-				Type: "output_text.delta",
-				Text: "</think>",
-			},
+			Delta:        "</think>",
 		})
 	}
 
@@ -426,6 +444,32 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 				})
 			}
 		}
+	} else {
+		// Emit done events for the text content (only when no tool calls)
+		emitEvent("response.output_text.done", openai.ResponseStreamEvent{
+			Type:         "response.output_text.done",
+			OutputIndex:  0,
+			ContentIndex: 0,
+		})
+		emitEvent("response.content_part.done", openai.ResponseStreamEvent{
+			Type:         "response.content_part.done",
+			OutputIndex:  0,
+			ContentIndex: 0,
+		})
+		emitEvent("response.output_item.done", openai.ResponseStreamEvent{
+			Type:        "response.output_item.done",
+			OutputIndex: 0,
+			Item: &openai.ResponseOutputItem{
+				Type:   "message",
+				ID:     msgID,
+				Status: "completed",
+				Role:   "assistant",
+				Content: []openai.ResponseContentBlock{{
+					Type: "output_text",
+					Text: accumulated,
+				}},
+			},
+		})
 	}
 
 	// Emit response.completed

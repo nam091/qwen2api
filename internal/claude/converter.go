@@ -12,10 +12,10 @@ func ToOpenAI(req MessagesRequest) (openai.ChatRequest, error) {
 	var messages []openai.ChatMessage
 
 	// Add system message if present
-	if req.System != "" {
+	if string(req.System) != "" {
 		messages = append(messages, openai.ChatMessage{
 			Role:    "system",
-			Content: json.RawMessage(fmt.Sprintf(`"%s"`, escapeJSON(req.System))),
+			Content: json.RawMessage(fmt.Sprintf(`"%s"`, escapeJSON(string(req.System)))),
 		})
 	}
 

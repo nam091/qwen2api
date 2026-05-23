@@ -1,14 +1,45 @@
-// Package claude defines Anthropic Claude Messages API types and conversion
-// to/from OpenAI format for qwen2api.
 package claude
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"fmt"
+)
+
+// SystemPrompt is a custom type that can unmarshal from either a string or an
+// array of text blocks.
+type SystemPrompt string
+
+func (sp *SystemPrompt) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*sp = SystemPrompt(str)
+		return nil
+	}
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(data, &parts); err == nil {
+		var combined string
+		for _, p := range parts {
+			if p.Type == "text" || p.Type == "" {
+				combined += p.Text
+			}
+		}
+		*sp = SystemPrompt(combined)
+		return nil
+	}
+	return fmt.Errorf("system prompt must be a string or an array of content blocks")
+}
 
 // MessagesRequest is the Claude Messages API request format.
 type MessagesRequest struct {
 	Model         string          `json:"model"`
 	Messages      []Message       `json:"messages"`
-	System        string          `json:"system,omitempty"`
+	System        SystemPrompt    `json:"system,omitempty"`
 	MaxTokens     int             `json:"max_tokens"`
 	Temperature   *float64        `json:"temperature,omitempty"`
 	TopP          *float64        `json:"top_p,omitempty"`
@@ -23,6 +54,40 @@ type MessagesRequest struct {
 type Message struct {
 	Role    string        `json:"role"`
 	Content []ContentPart `json:"content"`
+}
+
+func (m *Message) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	m.Role = raw.Role
+
+	if len(raw.Content) == 0 {
+		return nil
+	}
+
+	// Try as a plain string first.
+	var str string
+	if err := json.Unmarshal(raw.Content, &str); err == nil {
+		m.Content = []ContentPart{{
+			Type: "text",
+			Text: str,
+		}}
+		return nil
+	}
+
+	// Try as an array of ContentPart.
+	var parts []ContentPart
+	if err := json.Unmarshal(raw.Content, &parts); err == nil {
+		m.Content = parts
+		return nil
+	}
+
+	return fmt.Errorf("message content must be a string or an array of content blocks")
 }
 
 // ContentPart can be text, image, or tool_use/tool_result.

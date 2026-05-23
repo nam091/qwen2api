@@ -78,6 +78,8 @@ func New(deps Deps) http.Handler {
 		r.Post("/responses", h.responses)
 		// Claude API compatibility
 		r.Post("/anthropic/v1/messages", h.claudeMessages)
+		r.Post("/v1/messages", h.claudeMessages)
+		r.Post("/messages", h.claudeMessages)
 	})
 
 	r.Group(func(r chi.Router) {
