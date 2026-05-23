@@ -147,11 +147,15 @@ func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCl
 	}
 
 	// Build OpenAI completion
+	model := req.Model
+	if lastChunk.Model != "" {
+		model = lastChunk.Model
+	}
 	oaiResp := openai.ChatCompletion{
 		ID:      id,
 		Object:  "chat.completion",
 		Created: lastChunk.Created,
-		Model:   lastChunk.Model,
+		Model:   model,
 		Choices: []openai.Choice{
 			{
 				Index: 0,

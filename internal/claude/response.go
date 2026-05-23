@@ -23,7 +23,7 @@ func FromOpenAI(resp openai.ChatCompletion) MessagesResponse {
 	}
 
 	choice := resp.Choices[0]
-	var content []ContentPart
+	content := []ContentPart{}
 
 	// Add text content if present
 	if choice.Message.Content != nil && *choice.Message.Content != "" {
@@ -41,6 +41,14 @@ func FromOpenAI(resp openai.ChatCompletion) MessagesResponse {
 			ID:    tc.ID,
 			Name:  tc.Function.Name,
 			Input: input,
+		})
+	}
+
+	// If content is still empty, add an empty text block so Claude clients don't choke
+	if len(content) == 0 {
+		content = append(content, ContentPart{
+			Type: "text",
+			Text: "",
 		})
 	}
 
