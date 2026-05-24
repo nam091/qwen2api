@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -141,7 +142,7 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 
 	if req.Stream {
 		defer func() { _ = body.Close() }()
-		h.proxyResponsesStream(w, body, responseID, createdAt, req.Model, hasTools)
+		h.proxyResponsesStream(w, body, responseID, createdAt, req.Model, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 		h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusOK, time.Since(start), false, retries, nil)
 		return
@@ -346,7 +347,7 @@ func (h *handlers) collectResponsesCompletion(body io.ReadCloser, id string, cre
 }
 
 // proxyResponsesStream emits SSE events in the Responses API streaming format.
-func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool) {
+func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools, multiFormat bool) {
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -445,6 +446,38 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 	inThinking := false
 	var fullContent strings.Builder
 	contentIdx := 0
+	// When hasTools is true the model may emit <tool_call>...</tool_call>
+	// blocks inline with text. We must NOT forward those blocks to the client
+	// as text deltas — codex / claude-code render them as code blocks even
+	// though we also emit them as proper function_call output items, which
+	// gives the user a confusing duplicate display. So when we suspect a tool
+	// call is being formed, we hold back any unflushed bytes until the end of
+	// the stream and then emit only the cleaned text portion. `emittedLen`
+	// tracks bytes of `fullContent` already flushed as deltas.
+	emittedLen := 0
+	triggered := false
+
+	// Longest tag prefix we have to look out for. Hold back at least this
+	// many trailing bytes from delta emission when no tag has been confirmed
+	// yet, so we don't accidentally flush "<tool_ca" and only realise it was
+	// part of a tool call on the next chunk.
+	holdback := len("<tool_call")
+	if multiFormat && len("<function_calls") > holdback {
+		holdback = len("<function_calls")
+	}
+
+	emitTextDelta := func(s string) {
+		if s == "" {
+			return
+		}
+		emitEvent("response.output_text.delta", openai.ResponseStreamEvent{
+			Type:         "response.output_text.delta",
+			ItemID:       msgID,
+			OutputIndex:  0,
+			ContentIndex: contentIdx,
+			Delta:        s,
+		})
+	}
 
 	for {
 		evt, err := reader.Next()
@@ -469,24 +502,44 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 		}
 		fullContent.WriteString(text)
 
-		emitEvent("response.output_text.delta", openai.ResponseStreamEvent{
-			Type:         "response.output_text.delta",
-			ItemID:       msgID,
-			OutputIndex:  0,
-			ContentIndex: contentIdx,
-			Delta:        text,
-		})
+		if !hasTools {
+			// No tool support: stream every byte as soon as it arrives.
+			emitTextDelta(text)
+			emittedLen = fullContent.Len()
+			continue
+		}
+
+		if triggered {
+			// Already inside / past a suspected tool call. Buffer everything
+			// and decide at the end of the stream.
+			continue
+		}
+
+		accumulated := fullContent.String()
+		if strings.Contains(accumulated, "<tool_call") ||
+			(multiFormat && strings.Contains(accumulated, "<function_calls")) {
+			triggered = true
+			continue
+		}
+
+		// Hold back the longest possible tag prefix so we don't leak a
+		// partial "<tool_ca" to the client. Align to the start of a rune so
+		// we never split UTF-8 sequences mid-codepoint.
+		safe := len(accumulated) - holdback
+		if safe <= emittedLen {
+			continue
+		}
+		for safe > emittedLen && !utf8.RuneStart(accumulated[safe]) {
+			safe--
+		}
+		if safe > emittedLen {
+			emitTextDelta(accumulated[emittedLen:safe])
+			emittedLen = safe
+		}
 	}
 
 	if inThinking {
 		fullContent.WriteString("</think>")
-		emitEvent("response.output_text.delta", openai.ResponseStreamEvent{
-			Type:         "response.output_text.delta",
-			ItemID:       msgID,
-			OutputIndex:  0,
-			ContentIndex: contentIdx,
-			Delta:        "</think>",
-		})
 	}
 
 	accumulated := fullContent.String()
@@ -498,11 +551,18 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 	var toolCalls []openai.ToolCall
 	textContent := accumulated
 	if hasTools {
-		result := toolcall.ParseWithFormats(accumulated, h.deps.Config.Features.MultiFormatToolParsing)
+		result := toolcall.ParseWithFormats(accumulated, multiFormat)
 		if len(result.ToolCalls) > 0 {
 			toolCalls = result.ToolCalls
 			textContent = result.Content
 		}
+	}
+
+	// Flush any text we held back that turned out to be plain prose (no tool
+	// calls in it, or text after / between the stripped tool_call blocks).
+	if len(textContent) > emittedLen {
+		unsent := textContent[emittedLen:]
+		emitTextDelta(unsent)
 	}
 
 	// Close out the message item. We do this even when tool calls follow so
