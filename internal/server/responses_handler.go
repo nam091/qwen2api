@@ -324,7 +324,10 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 		}
 	}
 
-	emitEvent := func(eventType string, data any) {
+	seq := 0
+	emitEvent := func(eventType string, data openai.ResponseStreamEvent) {
+		data.SequenceNumber = seq
+		seq++
 		raw, err := json.Marshal(data)
 		if err != nil {
 			return
@@ -359,22 +362,41 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 		},
 	})
 
-	// Emit response.output_item.added for the message
+	// Emit response.output_item.added for the message.
+	// IMPORTANT: codex CLI requires the `content` array to be present (even
+	// if empty) so that the item passes its `ResponseItem::Message`
+	// deserialization and the active message id gets registered. Without
+	// this, every subsequent output_text.delta is logged as "OutputTextDelta
+	// without active item". We bypass ResponseStreamEvent here so the empty
+	// `content: []` slice survives JSON marshalling instead of being dropped
+	// by `omitempty`.
 	msgID := "msg_" + uuid.NewString()
-	emitEvent("response.output_item.added", openai.ResponseStreamEvent{
-		Type:        "response.output_item.added",
-		OutputIndex: 0,
-		Item: &openai.ResponseOutputItem{
-			Type:   "message",
-			ID:     msgID,
-			Status: "in_progress",
-			Role:   "assistant",
+	emitRaw := func(eventType string, payload any) {
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return
+		}
+		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, raw)
+		flush()
+	}
+	emitRaw("response.output_item.added", map[string]any{
+		"type":            "response.output_item.added",
+		"sequence_number": seq,
+		"output_index":    0,
+		"item": map[string]any{
+			"type":    "message",
+			"id":      msgID,
+			"status":  "in_progress",
+			"role":    "assistant",
+			"content": []any{},
 		},
 	})
+	seq++
 
 	// Emit response.content_part.added
 	emitEvent("response.content_part.added", openai.ResponseStreamEvent{
 		Type:         "response.content_part.added",
+		ItemID:       msgID,
 		OutputIndex:  0,
 		ContentIndex: 0,
 		Part: &openai.ResponseContentBlock{
@@ -413,6 +435,7 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 
 		emitEvent("response.output_text.delta", openai.ResponseStreamEvent{
 			Type:         "response.output_text.delta",
+			ItemID:       msgID,
 			OutputIndex:  0,
 			ContentIndex: contentIdx,
 			Delta:        text,
@@ -423,6 +446,7 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 		fullContent.WriteString("</think>")
 		emitEvent("response.output_text.delta", openai.ResponseStreamEvent{
 			Type:         "response.output_text.delta",
+			ItemID:       msgID,
 			OutputIndex:  0,
 			ContentIndex: contentIdx,
 			Delta:        "</think>",
@@ -431,110 +455,113 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 
 	accumulated := fullContent.String()
 
-	// Check for tool calls
+	// Decide whether the assistant produced tool calls or plain text. We
+	// always need to close the active message item (text/done events) when
+	// there's text content — `hasTools` only tells us the caller is
+	// expecting that tool calls *may* appear, not that they will.
+	var toolCalls []openai.ToolCall
+	textContent := accumulated
 	if hasTools {
 		result := toolcall.ParseWithFormats(accumulated, h.deps.Config.Features.MultiFormatToolParsing)
 		if len(result.ToolCalls) > 0 {
-			// Emit function_call items
-			for i, tc := range result.ToolCalls {
-				emitEvent("response.output_item.added", openai.ResponseStreamEvent{
-					Type:        "response.output_item.added",
-					OutputIndex: i + 1,
-					Item: &openai.ResponseOutputItem{
-						Type:      "function_call",
-						ID:        "fc_" + uuid.NewString(),
-						Status:    "completed",
-						CallID:    tc.ID,
-						Name:      tc.Function.Name,
-						Arguments: tc.Function.Arguments,
-					},
-				})
-			}
+			toolCalls = result.ToolCalls
+			textContent = result.Content
 		}
-	} else {
-		// Emit done events for the text content (only when no tool calls)
-		emitEvent("response.output_text.done", openai.ResponseStreamEvent{
-			Type:         "response.output_text.done",
-			OutputIndex:  0,
-			ContentIndex: 0,
-			ItemID:       msgID,
-			Text:         accumulated,
-		})
-		emitEvent("response.content_part.done", openai.ResponseStreamEvent{
-			Type:         "response.content_part.done",
-			OutputIndex:  0,
-			ContentIndex: 0,
-			ItemID:       msgID,
-			Part: &openai.ResponseContentBlock{
-				Type: "output_text",
-				Text: accumulated,
+	}
+
+	// Close out the message item. We do this even when tool calls follow so
+	// codex / claude-code can register the assistant turn properly.
+	emitEvent("response.output_text.done", openai.ResponseStreamEvent{
+		Type:         "response.output_text.done",
+		OutputIndex:  0,
+		ContentIndex: 0,
+		ItemID:       msgID,
+		Text:         textContent,
+	})
+	emitEvent("response.content_part.done", openai.ResponseStreamEvent{
+		Type:         "response.content_part.done",
+		OutputIndex:  0,
+		ContentIndex: 0,
+		ItemID:       msgID,
+		Part: &openai.ResponseContentBlock{
+			Type: "output_text",
+			Text: textContent,
+		},
+	})
+	emitRaw("response.output_item.done", map[string]any{
+		"type":            "response.output_item.done",
+		"sequence_number": seq,
+		"output_index":    0,
+		"item": map[string]any{
+			"type":    "message",
+			"id":      msgID,
+			"status":  "completed",
+			"role":    "assistant",
+			"content": []map[string]any{{"type": "output_text", "text": textContent}},
+		},
+	})
+	seq++
+
+	// Emit function_call items after the message.
+	for i, tc := range toolCalls {
+		fcID := "fc_" + uuid.NewString()
+		emitEvent("response.output_item.added", openai.ResponseStreamEvent{
+			Type:        "response.output_item.added",
+			OutputIndex: i + 1,
+			Item: &openai.ResponseOutputItem{
+				Type:      "function_call",
+				ID:        fcID,
+				Status:    "in_progress",
+				CallID:    tc.ID,
+				Name:      tc.Function.Name,
+				Arguments: "",
 			},
+		})
+		emitEvent("response.function_call_arguments.delta", openai.ResponseStreamEvent{
+			Type:        "response.function_call_arguments.delta",
+			OutputIndex: i + 1,
+			ItemID:      fcID,
+			Delta:       tc.Function.Arguments,
+		})
+		emitEvent("response.function_call_arguments.done", openai.ResponseStreamEvent{
+			Type:        "response.function_call_arguments.done",
+			OutputIndex: i + 1,
+			ItemID:      fcID,
+			Arguments:   tc.Function.Arguments,
 		})
 		emitEvent("response.output_item.done", openai.ResponseStreamEvent{
 			Type:        "response.output_item.done",
-			OutputIndex: 0,
+			OutputIndex: i + 1,
 			Item: &openai.ResponseOutputItem{
-				Type:   "message",
-				ID:     msgID,
-				Status: "completed",
-				Role:   "assistant",
-				Content: []openai.ResponseContentBlock{{
-					Type: "output_text",
-					Text: accumulated,
-				}},
+				Type:      "function_call",
+				ID:        fcID,
+				Status:    "completed",
+				CallID:    tc.ID,
+				Name:      tc.Function.Name,
+				Arguments: tc.Function.Arguments,
 			},
 		})
 	}
 
-	// Build the final output from the content we already accumulated.
-	var finalOutput []openai.ResponseOutputItem
-	if hasTools {
-		result := toolcall.ParseWithFormats(accumulated, h.deps.Config.Features.MultiFormatToolParsing)
-		if len(result.ToolCalls) > 0 {
-			if strings.TrimSpace(result.Content) != "" {
-				finalOutput = append(finalOutput, openai.ResponseOutputItem{
-					Type:   "message",
-					ID:     msgID,
-					Status: "completed",
-					Role:   "assistant",
-					Content: []openai.ResponseContentBlock{{
-						Type: "output_text",
-						Text: result.Content,
-					}},
-				})
-			}
-			for _, tc := range result.ToolCalls {
-				finalOutput = append(finalOutput, openai.ResponseOutputItem{
-					Type:      "function_call",
-					ID:        "fc_" + uuid.NewString(),
-					Status:    "completed",
-					CallID:    tc.ID,
-					Name:      tc.Function.Name,
-					Arguments: tc.Function.Arguments,
-				})
-			}
-		} else {
-			finalOutput = append(finalOutput, openai.ResponseOutputItem{
-				Type:   "message",
-				ID:     msgID,
-				Status: "completed",
-				Role:   "assistant",
-				Content: []openai.ResponseContentBlock{{
-					Type: "output_text",
-					Text: accumulated,
-				}},
-			})
-		}
-	} else {
+	// Final output array mirrors what was emitted as items.
+	finalOutput := []openai.ResponseOutputItem{{
+		Type:   "message",
+		ID:     msgID,
+		Status: "completed",
+		Role:   "assistant",
+		Content: []openai.ResponseContentBlock{{
+			Type: "output_text",
+			Text: textContent,
+		}},
+	}}
+	for _, tc := range toolCalls {
 		finalOutput = append(finalOutput, openai.ResponseOutputItem{
-			Type:   "message",
-			ID:     msgID,
-			Status: "completed",
-			Role:   "assistant",
-			Content: []openai.ResponseContentBlock{{
-				Type: "output_text",
-				Text: accumulated,
-			}},
+			Type:      "function_call",
+			ID:        "fc_" + uuid.NewString(),
+			Status:    "completed",
+			CallID:    tc.ID,
+			Name:      tc.Function.Name,
+			Arguments: tc.Function.Arguments,
 		})
 	}
 

@@ -74,15 +74,19 @@ type ResponseUsage struct {
 }
 
 // ResponseStreamEvent is an SSE event for streaming responses.
+// NOTE: OutputIndex / ContentIndex / SequenceNumber are intentionally not
+// `omitempty` because zero is a valid value and downstream consumers
+// (e.g. codex CLI) require the fields to be present on every event.
 type ResponseStreamEvent struct {
-	Type         string                `json:"type"`
-	Response     *ResponseObject       `json:"response,omitempty"`
-	Item         *ResponseOutputItem   `json:"item,omitempty"`
-	Part         *ResponseContentBlock `json:"part,omitempty"`
-	Delta        string                `json:"delta,omitempty"`
-	Text         string                `json:"text,omitempty"`
-	Arguments    string                `json:"arguments,omitempty"`
-	OutputIndex  int                   `json:"output_index,omitempty"`
-	ContentIndex int                   `json:"content_index,omitempty"`
-	ItemID       string                `json:"item_id,omitempty"`
+	Type           string                `json:"type"`
+	SequenceNumber int                   `json:"sequence_number"`
+	Response       *ResponseObject       `json:"response,omitempty"`
+	Item           *ResponseOutputItem   `json:"item,omitempty"`
+	Part           *ResponseContentBlock `json:"part,omitempty"`
+	Delta          string                `json:"delta,omitempty"`
+	Text           string                `json:"text,omitempty"`
+	Arguments      string                `json:"arguments,omitempty"`
+	OutputIndex    int                   `json:"output_index"`
+	ContentIndex   int                   `json:"content_index"`
+	ItemID         string                `json:"item_id,omitempty"`
 }
