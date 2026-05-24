@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -22,8 +23,16 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 		_ = r.Body.Close()
 	}()
 
+	bodyBytes, readErr := io.ReadAll(r.Body)
+	if readErr != nil {
+		writeError(w, http.StatusBadRequest, "invalid_request_error", "read body: "+readErr.Error())
+		return
+	}
+	if dumpPath := os.Getenv("QWEN2API_DEBUG_RESPONSES_DUMP"); dumpPath != "" {
+		_ = os.WriteFile(dumpPath, append(bodyBytes, '\n'), 0644)
+	}
 	var req openai.ResponsesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "invalid JSON body: "+err.Error())
 		return
 	}
@@ -190,12 +199,34 @@ func (h *handlers) convertResponsesInput(req openai.ResponsesRequest) ([]openai.
 		switch item.Type {
 		case "message":
 			role := item.Role
-			if role == "" {
+			switch role {
+			case "":
 				role = "user"
+			case "developer":
+				// Responses API "developer" role is OpenAI's higher-priority
+				// system equivalent (used by codex for permissions / skill
+				// catalogues). Collapse to "system" for upstream Qwen.
+				role = "system"
 			}
 			msgs = append(msgs, openai.ChatMessage{
 				Role:    role,
 				Content: item.Content,
+			})
+		case "function_call":
+			// Past assistant tool call echoed back as part of conversation
+			// history. Reconstruct as an assistant message carrying a
+			// tool_calls entry so collapseMessages renders it consistently.
+			msgs = append(msgs, openai.ChatMessage{
+				Role:    "assistant",
+				Content: jsonStringRaw(""),
+				ToolCalls: []openai.ToolCall{{
+					ID:   item.CallID,
+					Type: "function",
+					Function: openai.ToolCallFunction{
+						Name:      item.Name,
+						Arguments: item.Arguments,
+					},
+				}},
 			})
 		case "function_call_output":
 			msgs = append(msgs, openai.ChatMessage{
@@ -203,6 +234,11 @@ func (h *handlers) convertResponsesInput(req openai.ResponsesRequest) ([]openai.
 				Content:    jsonStringRaw(item.Output),
 				ToolCallID: item.CallID,
 			})
+		case "reasoning":
+			// Reasoning summaries from a prior turn — skip; we already
+			// stripped <think> blocks at the gateway boundary and there is
+			// no benefit to feeding the model back its own private thoughts.
+			continue
 		default:
 			// Treat unknown types as user messages if they have content
 			if len(item.Content) > 0 {

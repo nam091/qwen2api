@@ -46,7 +46,11 @@ func (m ChatMessage) Text() string {
 	if err := json.Unmarshal(m.Content, &parts); err == nil {
 		out := ""
 		for _, p := range parts {
-			if p.Type == "text" || p.Type == "" {
+			// Accept "text" (OpenAI chat), "input_text" (Responses API input
+			// from clients like codex CLI), and "output_text" (Responses API
+			// previous assistant turns echoed back as part of conversation
+			// history). Empty Type defaults to text.
+			if p.Type == "text" || p.Type == "" || p.Type == "input_text" || p.Type == "output_text" {
 				out += p.Text
 			}
 		}

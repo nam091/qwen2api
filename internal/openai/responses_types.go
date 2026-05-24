@@ -17,12 +17,22 @@ type ResponsesRequest struct {
 }
 
 // ResponseInputItem represents an input item in the Responses API.
+// Clients like codex send a mix of types when echoing prior turns back:
+//   - "message"               — role=user/developer/system/assistant
+//   - "function_call"         — past assistant tool call (name + arguments)
+//   - "function_call_output"  — tool execution result for a prior call_id
+//   - "reasoning"             — assistant's reasoning summary from a prior turn
 type ResponseInputItem struct {
-	Type    string          `json:"type"` // "message", "function_call_output"
-	Role    string          `json:"role,omitempty"`
-	Content json.RawMessage `json:"content,omitempty"` // string or []ContentPart
-	CallID  string          `json:"call_id,omitempty"`
-	Output  string          `json:"output,omitempty"`
+	Type      string          `json:"type"`
+	Role      string          `json:"role,omitempty"`
+	Content   json.RawMessage `json:"content,omitempty"` // string or []ContentPart
+	CallID    string          `json:"call_id,omitempty"`
+	Output    string          `json:"output,omitempty"`
+	Name      string          `json:"name,omitempty"`
+	Arguments string          `json:"arguments,omitempty"`
+	ID        string          `json:"id,omitempty"`
+	Status    string          `json:"status,omitempty"`
+	Summary   json.RawMessage `json:"summary,omitempty"`
 }
 
 // ResponseTool defines a tool for the Responses API.
