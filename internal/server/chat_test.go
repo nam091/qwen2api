@@ -522,6 +522,35 @@ func fakeUpstreamToolCall(t *testing.T) *httptest.Server {
 	return httptest.NewServer(mux)
 }
 
+// fakeUpstreamHybridToolCall mimics the malformed hybrid format observed in
+// the wild: a Qwen <tool_call> opener with a JSON name marker, Anthropic
+// <parameter=KEY>VALUE</parameter> blocks, and a </function> closer.
+func fakeUpstreamHybridToolCall(t *testing.T) *httptest.Server {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/chats/new", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"id":"chat-tc"}}`))
+	})
+	mux.HandleFunc("/api/v2/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl, _ := w.(http.Flusher)
+		writeData := func(s string) {
+			fmt.Fprintf(w, "data: %s\n\n", s)
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		writeData(`{"choices":[{"delta":{"role":"assistant","content":"Mình sẽ chạy verify. ","phase":"answer"}}]}`)
+		writeData(`{"choices":[{"delta":{"content":"<tool_call>","phase":"answer"}}]}`)
+		writeData(`{"choices":[{"delta":{"content":"{\"name\": \"shell_command\",","phase":"answer"}}]}`)
+		writeData(`{"choices":[{"delta":{"content":"<parameter=command>Select-String -Path x.ps1 'theme'</parameter>","phase":"answer"}}]}`)
+		writeData(`{"choices":[{"delta":{"content":"<parameter=justification>Verify theme</parameter>","phase":"answer"}}]}`)
+		writeData(`{"choices":[{"delta":{"content":"</function>","phase":"answer"}}]}`)
+		writeData(`{"choices":[{"delta":{"content":" Done.","phase":"answer"}}]}`)
+		writeData(`[DONE]`)
+	})
+	return httptest.NewServer(mux)
+}
+
 // TestResponsesStreamStripsToolCall ensures the /v1/responses streaming
 // handler never forwards <tool_call>...</tool_call> blocks to the client as
 // text deltas — those must be emitted as proper function_call output items
@@ -588,6 +617,62 @@ func TestResponsesStreamStripsToolCall(t *testing.T) {
 	}
 	if !strings.Contains(out, "Done.") {
 		t.Errorf("expected trailing prose to survive; got: %s", out)
+	}
+}
+
+// TestResponsesStreamStripsHybridToolCall covers the malformed hybrid format
+// the model occasionally emits (Qwen <tool_call> opener + Anthropic
+// <parameter=KEY> body + </function> closer). The gateway must still emit a
+// clean function_call output item and must not leak any of the raw
+// <tool_call> / <parameter=> syntax into output_text.delta events.
+func TestResponsesStreamStripsHybridToolCall(t *testing.T) {
+	upstream := fakeUpstreamHybridToolCall(t)
+	defer upstream.Close()
+	h := newTestServer(t, upstream)
+
+	body := `{
+		"model":"qwen3.7-max",
+		"stream":true,
+		"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"verify the static init"}]}],
+		"tools":[{"type":"function","name":"shell_command","description":"run","parameters":{"type":"object"}}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer sk-test")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got %d body=%s", rec.Code, rec.Body.String())
+	}
+	out := rec.Body.String()
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		payload := strings.TrimPrefix(line, "data: ")
+		if payload == "[DONE]" {
+			continue
+		}
+		var ev map[string]any
+		if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+			continue
+		}
+		if ev["type"] != "response.output_text.delta" {
+			continue
+		}
+		delta, _ := ev["delta"].(string)
+		if strings.Contains(delta, "<tool_call") || strings.Contains(delta, "</function>") || strings.Contains(delta, "<parameter=") {
+			t.Errorf("output_text.delta leaked hybrid tool_call syntax: %q", delta)
+		}
+	}
+	if !strings.Contains(out, `"type":"function_call"`) {
+		t.Errorf("expected a function_call output item; got: %s", out)
+	}
+	if !strings.Contains(out, `"name":"shell_command"`) {
+		t.Errorf("expected tool name in function_call item; got: %s", out)
+	}
+	if !strings.Contains(out, "Select-String") {
+		t.Errorf("expected tool args to be carried via function_call.arguments; got: %s", out)
 	}
 }
 

@@ -19,8 +19,16 @@ var (
 	reInvokeBlock       = regexp.MustCompile(`(?s)<invoke[^>]*name="([^"]+)"[^>]*>(.*?)</invoke>`)
 	reInvokeParameter   = regexp.MustCompile(`(?s)<parameter[^>]*name="([^"]+)"[^>]*>(.*?)</parameter>`)
 	reFunctionXML       = regexp.MustCompile(`(?s)<function=([^>]+)>(.*?)</function>`)
-	reParameter         = regexp.MustCompile(`(?s)<parameter=([^>]+)>(.*?)</parameter>`)
+	reParameter         = regexp.MustCompile(`(?s)<parameter=([^>]+?)>(.*?)</parameter>`)
 	reBareJSON          = regexp.MustCompile(`(?s)\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*(?:\{.*?\}|"[^"]*"|null)\s*\}`)
+	// reHybridToolCallBlock matches <tool_call> openers paired with non-
+	// canonical closers (</function>, </function_calls>) that some models
+	// emit when they confuse Qwen and Anthropic tool-call formats.
+	reHybridToolCallBlock = regexp.MustCompile(`(?s)<tool_call>\s*(.*?)\s*</(?:function|function_calls)>`)
+	// reNameMarker pulls a tool name out of a JSON-ish prefix even if the
+	// surrounding object is malformed (e.g. `{"name": "foo` without a
+	// closing quote, or with a stray `>` after the name).
+	reNameMarker = regexp.MustCompile(`"name"\s*:\s*"([A-Za-z_][A-Za-z0-9_]*)`)
 )
 
 // ParseResult holds the outcome of parsing response text for tool calls.
@@ -41,6 +49,13 @@ func Parse(text string) ParseResult {
 func ParseWithFormats(text string, multiFormat bool) ParseResult {
 	calls, content := parseToolCallBlocks(text)
 	if !multiFormat {
+		// Hybrid <tool_call>...</function> blocks are accepted even in
+		// single-format mode because they are still anchored on the Qwen
+		// <tool_call> opener.
+		moreCalls, c := parseHybridToolCallBlocks(content)
+		calls = append(calls, moreCalls...)
+		content = c
+		content = stripOrphanToolCallBlocks(content)
 		// Apply hallucination protection
 		calls, _ = hallucination.Sanitize(calls)
 		return ParseResult{Content: strings.TrimSpace(content), ToolCalls: calls}
@@ -50,9 +65,17 @@ func ParseWithFormats(text string, multiFormat bool) ParseResult {
 	moreCalls, content := parseFunctionCallBlocks(content)
 	calls = append(calls, moreCalls...)
 
+	// Hybrid <tool_call>...</function> blocks (model confused two formats).
+	moreCalls, content = parseHybridToolCallBlocks(content)
+	calls = append(calls, moreCalls...)
+
 	// Bare JSON tool calls (no <tool_call> wrapper).
 	moreCalls, content = parseBareJSON(content)
 	calls = append(calls, moreCalls...)
+
+	// Safety net: any remaining unparsed <tool_call> blocks shouldn't leak
+	// into the displayed text (codex / claude-code render them as garbage).
+	content = stripOrphanToolCallBlocks(content)
 
 	// Apply hallucination protection: remove invalid/duplicate calls
 	calls, _ = hallucination.Sanitize(calls)
@@ -164,7 +187,84 @@ func parseBlock(inner string) (openai.ToolCall, bool) {
 	if tc, ok := parseXML(inner); ok {
 		return tc, true
 	}
+	if tc, ok := parseHybrid(inner); ok {
+		return tc, true
+	}
 	return openai.ToolCall{}, false
+}
+
+// parseHybridToolCallBlocks handles <tool_call> openers paired with
+// </function> or </function_calls> closers. The model occasionally
+// emits these when it conflates Qwen and Anthropic tool-call syntax.
+func parseHybridToolCallBlocks(text string) ([]openai.ToolCall, string) {
+	matches := reHybridToolCallBlock.FindAllStringSubmatchIndex(text, -1)
+	if len(matches) == 0 {
+		return nil, text
+	}
+	var calls []openai.ToolCall
+	var content strings.Builder
+	lastEnd := 0
+	for _, loc := range matches {
+		content.WriteString(text[lastEnd:loc[0]])
+		lastEnd = loc[1]
+		inner := strings.TrimSpace(text[loc[2]:loc[3]])
+		if tc, ok := parseBlock(inner); ok {
+			calls = append(calls, tc)
+			continue
+		}
+		// Drop the block from output even when parsing fails. Showing the
+		// raw malformed tool-call text to the user is strictly worse than
+		// dropping it silently — codex / claude-code would render it as
+		// noisy prose either way.
+	}
+	content.WriteString(text[lastEnd:])
+	return calls, content.String()
+}
+
+// parseHybrid handles the case where the model emitted a hybrid format
+// inside a <tool_call> wrapper: a JSON-ish `"name": "foo"` opener
+// followed by Anthropic-style <parameter=KEY>VALUE</parameter> blocks.
+// e.g. `{"name": "u_shell_command<parameter=command>ls</parameter>...`
+func parseHybrid(inner string) (openai.ToolCall, bool) {
+	nameMatch := reNameMarker.FindStringSubmatch(inner)
+	if nameMatch == nil {
+		return openai.ToolCall{}, false
+	}
+	paramMatches := reParameter.FindAllStringSubmatch(inner, -1)
+	if len(paramMatches) == 0 {
+		return openai.ToolCall{}, false
+	}
+	funcName := strings.TrimSpace(nameMatch[1])
+	clientName := toolname.FromQwen(funcName)
+
+	params := map[string]string{}
+	for _, pm := range paramMatches {
+		key := strings.TrimSpace(pm[1])
+		value := strings.TrimSpace(pm[2])
+		params[key] = value
+	}
+	argsJSON, err := json.Marshal(params)
+	if err != nil {
+		return openai.ToolCall{}, false
+	}
+	return openai.ToolCall{
+		ID:   generateID(),
+		Type: "function",
+		Function: openai.ToolCallFunction{
+			Name:      clientName,
+			Arguments: string(argsJSON),
+		},
+	}, true
+}
+
+// stripOrphanToolCallBlocks removes any leftover <tool_call>...</tool_call>
+// blocks from text after all parsers have run. This is a safety net for
+// malformed blocks whose inner JSON could not be parsed or repaired —
+// rendering the raw block to the client is always worse than dropping it.
+func stripOrphanToolCallBlocks(text string) string {
+	text = reToolCallBlock.ReplaceAllString(text, "")
+	text = reHybridToolCallBlock.ReplaceAllString(text, "")
+	return text
 }
 
 func parseJSON(inner string) (openai.ToolCall, bool) {
