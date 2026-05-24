@@ -122,7 +122,7 @@ func Default() Config {
 			MultiFormatToolParsing: true,
 			Multimodal:             true,
 			Embeddings:             false,
-			ConversationContinuity: false,
+			ConversationContinuity: true,
 			APIKeyRotation:         false,
 			BrowserEngineFallback:  false,
 			Tunnel:                 true,

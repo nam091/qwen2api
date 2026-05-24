@@ -14,6 +14,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/claude"
 	"github.com/keaume34/qwen2api/internal/config"
 	"github.com/keaume34/qwen2api/internal/openai"
+	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/toolcall"
 )
@@ -62,10 +63,31 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 		maxAttempts = h.deps.Config.Retry.MaxAttempts
 	}
 
+	// Conversation continuity: reuse a previously-allocated chat_id when this
+	// request is a follow-up turn. This avoids the /api/v2/chats/new round-trip
+	// and lets qwen.ai keep its server-side context cache warm across turns.
+	//
+	// Lookup key is the hash of msgs[:-2] (drop the prior assistant + this
+	// turn's new user message). It matches the STORE key we wrote at the
+	// previous turn, which hashes the FULL message slice of that turn (because
+	// the next turn appends [assistant, user] on top of that slice).
+	var cacheKey, lookupContinuityKey string
+	if h.deps.Config.Features.PromptCaching && h.deps.Cache != nil && len(upstreamReq.Messages) > 0 {
+		cacheKey = promptcache.Key(upstreamReq.Model+":claude", upstreamReq.Messages[0].Content)
+	}
+	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil {
+		lookupContinuityKey = lookupConvKey(upstreamReq.Model+":claude:conv", oaiReq.Messages)
+	}
+	var storeContinuityKey string
+	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil && len(oaiReq.Messages) > 0 {
+		storeContinuityKey = promptcache.Key(upstreamReq.Model+":claude:conv", collapseMessages(oaiReq.Messages))
+	}
+
 	var (
-		token   config.Token
-		body    io.ReadCloser
-		retries int
+		token    config.Token
+		body     io.ReadCloser
+		retries  int
+		cacheHit bool
 	)
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		t, takeErr := h.deps.TokenPool.Take()
@@ -76,22 +98,63 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 		}
 		token = t
 
-		chatID, chatErr := h.deps.Qwen.NewChat(r.Context(), token.Value, upstreamReq.Model, upstreamReq.ChatType)
-		if chatErr != nil {
-			if shouldRetry(chatErr) && attempt < maxAttempts {
-				retries++
-				h.markBadAndLog(token.Value, chatErr, "create chat session (claude)", attempt)
-				continue
+		var chatID string
+		if lookupContinuityKey != "" {
+			if cached, ok := h.deps.Cache.Get(lookupContinuityKey); ok {
+				chatID = cached
+				cacheHit = true
+				h.metricsInc("qwen2api_continuity_hits_total")
 			}
-			writeClaudeError(w, http.StatusBadGateway, "api_error", "failed to create chat: "+chatErr.Error())
-			h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusBadGateway, time.Since(start), false, retries, chatErr)
-			return
+		}
+		if chatID == "" && cacheKey != "" {
+			if cached, ok := h.deps.Cache.Get(cacheKey); ok {
+				chatID = cached
+				cacheHit = true
+				h.metricsInc("qwen2api_cache_hits_total")
+			} else {
+				h.metricsInc("qwen2api_cache_misses_total")
+			}
+		}
+
+		if chatID == "" {
+			newID, chatErr := h.deps.Qwen.NewChat(r.Context(), token.Value, upstreamReq.Model, upstreamReq.ChatType)
+			if chatErr != nil {
+				if shouldRetry(chatErr) && attempt < maxAttempts {
+					retries++
+					h.markBadAndLog(token.Value, chatErr, "create chat session (claude)", attempt)
+					continue
+				}
+				writeClaudeError(w, http.StatusBadGateway, "api_error", "failed to create chat: "+chatErr.Error())
+				h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusBadGateway, time.Since(start), false, retries, chatErr)
+				return
+			}
+			chatID = newID
+			if cacheKey != "" {
+				h.deps.Cache.Put(cacheKey, chatID)
+			}
+		}
+		if storeContinuityKey != "" {
+			h.deps.Cache.Put(storeContinuityKey, chatID)
 		}
 		upstreamReq.ChatID = chatID
 
 		var cmpErr error
 		body, cmpErr = h.deps.Qwen.Completions(r.Context(), token.Value, upstreamReq)
 		if cmpErr != nil {
+			// If the cached chat_id is the cause (e.g. expired upstream),
+			// drop it so the next attempt allocates a fresh one.
+			if cacheHit {
+				if lookupContinuityKey != "" {
+					h.deps.Cache.Invalidate(lookupContinuityKey)
+				}
+				if storeContinuityKey != "" {
+					h.deps.Cache.Invalidate(storeContinuityKey)
+				}
+				if cacheKey != "" {
+					h.deps.Cache.Invalidate(cacheKey)
+				}
+				cacheHit = false
+			}
 			if shouldRetry(cmpErr) && attempt < maxAttempts {
 				retries++
 				h.markBadAndLog(token.Value, cmpErr, "open completion stream (claude)", attempt)
@@ -123,7 +186,7 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 		h.aggregateClaudeResponse(w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
 	}
 	h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
-	h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusOK, time.Since(start), false, retries, nil)
+	h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
 }
 
 // streamClaudeResponse reads raw Qwen SSE, applies thinking wrapping and tool

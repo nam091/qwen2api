@@ -14,6 +14,7 @@ import (
 
 	"github.com/keaume34/qwen2api/internal/config"
 	"github.com/keaume34/qwen2api/internal/openai"
+	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/toolcall"
 )
@@ -87,10 +88,48 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 		maxAttempts = h.deps.Config.Retry.MaxAttempts
 	}
 
+	// Conversation continuity: reuse a previously-allocated chat_id when this
+	// request is a follow-up turn in an existing conversation. This avoids the
+	// /api/v2/chats/new round-trip and (more importantly) lets qwen.ai keep its
+	// server-side context cache warm across turns.
+	//
+	// Three signals are checked, in order of decreasing precision:
+	//   1. `previous_response_id` (codex CLI sends this on follow-up turns).
+	//      We stash chat_id under this key at the end of every successful turn,
+	//      keyed by the OUTGOING response_id, so the next request hits.
+	//   2. "Prior prefix hash" — hash of everything except the trailing
+	//      [assistant, user] pair. When this turn is a follow-up, this hash
+	//      equals what we stored at the previous turn (which stored the hash
+	//      of its entire messages slice).
+	//   3. First-message hash (system prompt). Catches "same agent role"
+	//      cases even when conversation diverges.
+	var cacheKey, lookupContinuityKey, prevRespKey string
+	if h.deps.Config.Features.PromptCaching && h.deps.Cache != nil && len(upstreamReq.Messages) > 0 {
+		cacheKey = promptcache.Key(upstreamReq.Model+":responses", upstreamReq.Messages[0].Content)
+	}
+	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil {
+		if req.PreviousResponseID != "" {
+			prevRespKey = promptcache.Key(upstreamReq.Model+":responses:prev", req.PreviousResponseID)
+		}
+		if k := lookupConvKey(upstreamReq.Model+":responses:conv", chatReq.Messages); k != "" {
+			lookupContinuityKey = k
+		}
+	}
+	// The STORE key always covers this request's full message slice (including
+	// the trailing user we just received). On the next turn the client will
+	// append the assistant reply + a new user, so its LOOKUP — which drops the
+	// last [assistant, user] pair — will recover exactly this hash.
+	var storeContinuityKey string
+	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil && len(chatReq.Messages) > 0 {
+		storeContinuityKey = promptcache.Key(upstreamReq.Model+":responses:conv", collapseMessages(chatReq.Messages))
+	}
+
 	var (
-		token config.Token
-		body  io.ReadCloser
-		retries int
+		token           config.Token
+		body            io.ReadCloser
+		retries         int
+		cacheHit        bool
+		activeChatID    string
 	)
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -103,30 +142,84 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 		}
 		token = t
 
-		chatID, err := h.deps.Qwen.NewChat(r.Context(), token.Value, upstreamReq.Model, upstreamReq.ChatType)
-		if err != nil {
-			if shouldRetry(err) && attempt < maxAttempts {
-				retries++
-				h.markBadAndLog(token.Value, err, "create chat session (responses)", attempt)
-				continue
+		var chatID string
+		if prevRespKey != "" {
+			if cached, ok := h.deps.Cache.Get(prevRespKey); ok {
+				chatID = cached
+				cacheHit = true
+				h.metricsInc("qwen2api_previous_response_hits_total")
 			}
-			h.handleUpstreamFailure(w, token.Value, err, "create chat session")
-			h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, err)
-			return
+		}
+		if chatID == "" && lookupContinuityKey != "" {
+			if cached, ok := h.deps.Cache.Get(lookupContinuityKey); ok {
+				chatID = cached
+				cacheHit = true
+				h.metricsInc("qwen2api_continuity_hits_total")
+			}
+		}
+		if chatID == "" && cacheKey != "" {
+			if cached, ok := h.deps.Cache.Get(cacheKey); ok {
+				chatID = cached
+				cacheHit = true
+				h.metricsInc("qwen2api_cache_hits_total")
+			} else {
+				h.metricsInc("qwen2api_cache_misses_total")
+			}
+		}
+
+		if chatID == "" {
+			newID, err := h.deps.Qwen.NewChat(r.Context(), token.Value, upstreamReq.Model, upstreamReq.ChatType)
+			if err != nil {
+				if shouldRetry(err) && attempt < maxAttempts {
+					retries++
+					h.markBadAndLog(token.Value, err, "create chat session (responses)", attempt)
+					continue
+				}
+				h.handleUpstreamFailure(w, token.Value, err, "create chat session")
+				h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, err)
+				return
+			}
+			chatID = newID
+			if cacheKey != "" {
+				h.deps.Cache.Put(cacheKey, chatID)
+			}
+		}
+		// Always (cache-hit or freshly-allocated) record chat_id under the
+		// store-key derived from this request's *current* message slice so the
+		// next turn's prefix-hash lookup finds it.
+		if storeContinuityKey != "" {
+			h.deps.Cache.Put(storeContinuityKey, chatID)
 		}
 		upstreamReq.ChatID = chatID
 
-		body, err = h.deps.Qwen.Completions(r.Context(), token.Value, upstreamReq)
-		if err != nil {
-			if shouldRetry(err) && attempt < maxAttempts {
+		var cmpErr error
+		body, cmpErr = h.deps.Qwen.Completions(r.Context(), token.Value, upstreamReq)
+		if cmpErr != nil {
+			if cacheHit {
+				if prevRespKey != "" {
+					h.deps.Cache.Invalidate(prevRespKey)
+				}
+				if lookupContinuityKey != "" {
+					h.deps.Cache.Invalidate(lookupContinuityKey)
+				}
+				if storeContinuityKey != "" {
+					h.deps.Cache.Invalidate(storeContinuityKey)
+				}
+				if cacheKey != "" {
+					h.deps.Cache.Invalidate(cacheKey)
+				}
+				cacheHit = false
+			}
+			if shouldRetry(cmpErr) && attempt < maxAttempts {
 				retries++
-				h.markBadAndLog(token.Value, err, "open completion stream (responses)", attempt)
+				h.markBadAndLog(token.Value, cmpErr, "open completion stream (responses)", attempt)
 				continue
 			}
-			h.handleUpstreamFailure(w, token.Value, err, "open completion stream")
-			h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, err)
+			h.handleUpstreamFailure(w, token.Value, cmpErr, "open completion stream")
+			h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, cmpErr)
 			return
 		}
+		activeChatID = chatID
 		break
 	}
 
@@ -140,11 +233,18 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 	createdAt := unixNow()
 	hasTools := len(req.Tools) > 0
 
+	// Stash chat_id under the response_id we're about to emit so the client's
+	// next call carrying previous_response_id=<responseID> reuses this same
+	// Qwen chat session (and its server-side context cache).
+	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil && activeChatID != "" {
+		h.deps.Cache.Put(promptcache.Key(upstreamReq.Model+":responses:prev", responseID), activeChatID)
+	}
+
 	if req.Stream {
 		defer func() { _ = body.Close() }()
 		h.proxyResponsesStream(w, body, responseID, createdAt, req.Model, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
-		h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusOK, time.Since(start), false, retries, nil)
+		h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
 		return
 	}
 
@@ -157,7 +257,7 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusOK, resp)
 	h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
-	h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusOK, time.Since(start), false, retries, nil)
+	h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
 }
 
 // convertResponsesInput converts Responses API input to ChatMessages.

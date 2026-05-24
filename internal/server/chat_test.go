@@ -13,6 +13,7 @@ import (
 
 	"github.com/keaume34/qwen2api/internal/config"
 	"github.com/keaume34/qwen2api/internal/openai"
+	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/tokenpool"
 )
@@ -587,5 +588,64 @@ func TestResponsesStreamStripsToolCall(t *testing.T) {
 	}
 	if !strings.Contains(out, "Done.") {
 		t.Errorf("expected trailing prose to survive; got: %s", out)
+	}
+}
+
+// TestConversationContinuityKeys ensures lookupConvKey and the stored key
+// match across turns so multi-turn conversations actually reuse chat_id.
+//
+// Storage on turn N: hash(messages_of_turn_N)
+// Lookup on turn N+1: hash(messages_of_turn_(N+1)[:-2])  // drop assistant_N, user_(N+1)
+// These hashes MUST agree, otherwise the cache provides no benefit.
+func TestConversationContinuityKeys(t *testing.T) {
+	model := "qwen3.7-max:test:conv"
+
+	turn1 := []openai.ChatMessage{
+		{Role: "system", Content: jsonStringRaw("You are helpful.")},
+		{Role: "user", Content: jsonStringRaw("Hello, my name is Alice.")},
+	}
+	// Turn 1: store hash of full turn1.
+	storeKey1 := promptcache.Key(model, collapseMessages(turn1))
+	// Turn 1: cannot lookup (no prior assistant).
+	if lookupConvKey(model, turn1) != "" {
+		t.Fatalf("turn 1 should have no lookup key (no prior assistant)")
+	}
+
+	// Turn 2: client echoed back assistant_1, added user_2.
+	turn2 := append([]openai.ChatMessage(nil), turn1...)
+	turn2 = append(turn2,
+		openai.ChatMessage{Role: "assistant", Content: jsonStringRaw("Hi Alice!")},
+		openai.ChatMessage{Role: "user", Content: jsonStringRaw("What's my name?")},
+	)
+	lookupKey2 := lookupConvKey(model, turn2)
+	if lookupKey2 == "" {
+		t.Fatalf("turn 2 should have a lookup key")
+	}
+	if lookupKey2 != storeKey1 {
+		t.Errorf("turn 2 lookup key must equal turn 1 store key\n  store1=%s\n  lookup2=%s",
+			storeKey1, lookupKey2)
+	}
+
+	// And turn 2 stores its OWN full slice for the next lookup.
+	storeKey2 := promptcache.Key(model, collapseMessages(turn2))
+
+	// Turn 3: lookup should hit storeKey2.
+	turn3 := append([]openai.ChatMessage(nil), turn2...)
+	turn3 = append(turn3,
+		openai.ChatMessage{Role: "assistant", Content: jsonStringRaw("Your name is Alice.")},
+		openai.ChatMessage{Role: "user", Content: jsonStringRaw("Thanks!")},
+	)
+	lookupKey3 := lookupConvKey(model, turn3)
+	if lookupKey3 != storeKey2 {
+		t.Errorf("turn 3 lookup key must equal turn 2 store key\n  store2=%s\n  lookup3=%s",
+			storeKey2, lookupKey3)
+	}
+
+	// Edge: lookup returns "" when trailing shape isn't [assistant, user].
+	if got := lookupConvKey(model, []openai.ChatMessage{
+		{Role: "user", Content: jsonStringRaw("a")},
+		{Role: "user", Content: jsonStringRaw("b")},
+	}); got != "" {
+		t.Errorf("expected empty key for [user, user] tail, got %q", got)
 	}
 }

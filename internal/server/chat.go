@@ -93,12 +93,16 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		cacheKey = promptcache.Key(upstreamReq.Model, upstreamReq.Messages[0].Content)
 	}
 
-	// Conversation continuity: hash by all messages except the last user turn,
-	// so follow-ups in the same conversation reuse the chat session.
-	var continuityKey string
-	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil && len(req.Messages) >= 2 {
-		prefix := collapseMessages(req.Messages[:len(req.Messages)-1])
-		continuityKey = promptcache.Key(upstreamReq.Model+":conv", prefix)
+	// Conversation continuity: lookup is by hash of msgs[:-2] (drop the prior
+	// assistant + the just-received user). It matches a STORE key written at
+	// the previous turn that hashed that turn's FULL message slice.
+	var lookupContinuityKey string
+	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil {
+		lookupContinuityKey = lookupConvKey(upstreamReq.Model+":conv", req.Messages)
+	}
+	var storeContinuityKey string
+	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil && len(req.Messages) > 0 {
+		storeContinuityKey = promptcache.Key(upstreamReq.Model+":conv", collapseMessages(req.Messages))
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -135,8 +139,8 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				h.metricsInc("qwen2api_cache_misses_total")
 			}
 		}
-		if chatID == "" && continuityKey != "" {
-			if cached, ok := h.deps.Cache.Get(continuityKey); ok {
+		if chatID == "" && lookupContinuityKey != "" {
+			if cached, ok := h.deps.Cache.Get(lookupContinuityKey); ok {
 				chatID = cached
 				cacheHit = true
 				h.metricsInc("qwen2api_continuity_hits_total")
@@ -159,9 +163,9 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			if cacheKey != "" {
 				h.deps.Cache.Put(cacheKey, chatID)
 			}
-			if continuityKey != "" {
-				h.deps.Cache.Put(continuityKey, chatID)
-			}
+		}
+		if storeContinuityKey != "" {
+			h.deps.Cache.Put(storeContinuityKey, chatID)
 		}
 		upstreamReq.ChatID = chatID
 
@@ -481,6 +485,29 @@ func lastNonEmptyRole(msgs []openai.ChatMessage) string {
 		}
 	}
 	return ""
+}
+
+// lookupConvKey returns the cache key under which a prior turn would have
+// stored its chat_id, given THIS request's full message slice.
+//
+// Storage on turn N: hash(msgs at end of turn N) -> chat_id.
+// On turn N+1 the client appends [assistant_N, user_{N+1}]. To recover the
+// prior key we drop those two trailing messages. If the trailing shape isn't
+// [..., assistant, user] we return "" (no continuation signal).
+func lookupConvKey(model string, msgs []openai.ChatMessage) string {
+	if len(msgs) < 2 {
+		return ""
+	}
+	last := strings.ToLower(msgs[len(msgs)-1].Role)
+	prev := strings.ToLower(msgs[len(msgs)-2].Role)
+	if last != "user" || prev != "assistant" {
+		return ""
+	}
+	prefix := msgs[:len(msgs)-2]
+	if len(prefix) == 0 {
+		return ""
+	}
+	return promptcache.Key(model, collapseMessages(prefix))
 }
 
 func chatTypeFromModel(model string) string {
