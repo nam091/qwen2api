@@ -62,6 +62,12 @@ func New(deps Deps) http.Handler {
 	}
 	r.Get("/dashboard", h.dashboard)
 	r.Get("/dashboard/data", h.dashboardData)
+	r.Get("/v1", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "API key required for remote API access"})
+	})
+	r.Get("/v1/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "API key required for remote API access"})
+	})
 
 	// OpenAI-compatible surface, accessible both at /v1/* and at the root for
 	// clients that strip the version prefix.
