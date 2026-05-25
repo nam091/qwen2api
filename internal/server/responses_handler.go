@@ -266,6 +266,15 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 	responseID := "resp_" + uuid.NewString()
 	createdAt := unixNow()
 	hasTools := len(req.Tools) > 0
+	if !hasTools {
+		// Proactively check if there are any tool calls/results in history
+		for _, m := range messages {
+			if m.Role == "tool" || len(m.ToolCalls) > 0 {
+				hasTools = true
+				break
+			}
+		}
+	}
 
 	// Stash chat_id under the response_id we're about to emit so the client's
 	// next call carrying previous_response_id=<responseID> reuses this same

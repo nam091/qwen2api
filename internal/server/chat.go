@@ -242,6 +242,15 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	completionID := "chatcmpl-" + uuid.NewString()
 	created := unixNow()
 	hasTools := len(req.Tools) > 0
+	if !hasTools {
+		// Proactively check if there are any tool calls/results in history
+		for _, m := range req.Messages {
+			if m.Role == "tool" || len(m.ToolCalls) > 0 {
+				hasTools = true
+				break
+			}
+		}
+	}
 	if req.Stream {
 		defer func() {
 			_ = body.Close()

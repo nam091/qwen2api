@@ -205,8 +205,22 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 	defer func() { _ = body.Close() }()
 
 	hasTools := len(req.Tools) > 0
+	if !hasTools {
+		// Proactively check if there are any tool_use or tool_result parts in history
+		for _, m := range req.Messages {
+			for _, p := range m.Content {
+				if p.Type == "tool_use" || p.Type == "tool_result" {
+					hasTools = true
+					break
+				}
+			}
+			if hasTools {
+				break
+			}
+		}
+	}
 	oaiReq.Stream = req.Stream
-	if hasTools && len(oaiReq.Tools) == 0 {
+	if hasTools && len(oaiReq.Tools) == 0 && len(req.Tools) > 0 {
 		oaiReq.Tools = make([]openai.Tool, len(req.Tools))
 	}
 	msgID := "msg_" + uuid.NewString()
