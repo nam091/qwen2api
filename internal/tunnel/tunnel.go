@@ -39,7 +39,7 @@ func (m *Manager) Start(port int) (string, error) {
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	cmd := exec.CommandContext(ctx, "cloudflared", "tunnel", "--url", fmt.Sprintf("http://localhost:%d", port))
+	cmd := exec.CommandContext(ctx, "cloudflared", "tunnel", "--protocol", "http2", "--url", fmt.Sprintf("http://localhost:%d", port))
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
