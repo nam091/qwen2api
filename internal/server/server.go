@@ -74,6 +74,7 @@ func New(deps Deps) http.Handler {
 	r.Group(func(r chi.Router) {
 		r.Use(h.authMiddleware)
 		r.Get("/v1/models", h.listModels)
+		r.Get("/v1/v1/models", h.listModels)
 		r.Get("/models", h.listModels)
 		r.Post("/v1/chat/completions", h.chatCompletions)
 		r.Post("/chat/completions", h.chatCompletions)
@@ -85,6 +86,7 @@ func New(deps Deps) http.Handler {
 		// Claude API compatibility
 		r.Post("/anthropic/v1/messages", h.claudeMessages)
 		r.Post("/v1/messages", h.claudeMessages)
+		r.Post("/v1/v1/messages", h.claudeMessages)
 		r.Post("/messages", h.claudeMessages)
 	})
 
