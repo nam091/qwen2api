@@ -124,8 +124,15 @@ func New(deps Deps) http.Handler {
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS, PUT")
+		
+		// Dynamically allow any headers requested by the client
+		if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
+			w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
+		} else {
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, X-API-Key, Anthropic-Version, Anthropic-Beta, Anthropic-Dangerous-Direct-Browser-Access")
+		}
+		
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
