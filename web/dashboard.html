@@ -3863,7 +3863,7 @@
         }
         if (urlDisplay && urlCode && tunnelState.url) {
           urlDisplay.style.display = 'block';
-          urlCode.textContent = tunnelState.url;
+          urlCode.textContent = tunnelState.url + "/v1";
         }
         if (epBtn) {
           epBtn.style.background = 'var(--color-success)';
@@ -3873,7 +3873,7 @@
         }
         if (epUrlWrapper && epUrlCode && tunnelState.url) {
           epUrlWrapper.style.display = 'flex';
-          epUrlCode.textContent = tunnelState.url;
+          epUrlCode.textContent = tunnelState.url + "/v1";
         }
       } else {
         if (badge) {
