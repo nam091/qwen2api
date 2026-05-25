@@ -13,6 +13,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/config"
 	"github.com/keaume34/qwen2api/internal/filecache"
 	"github.com/keaume34/qwen2api/internal/metrics"
+	"github.com/keaume34/qwen2api/internal/ossupload"
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/reqlog"
@@ -49,7 +50,11 @@ func New(deps Deps) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
 
-	h := &handlers{deps: deps}
+	h := &handlers{
+		deps:          deps,
+		imageUploader: ossupload.NewUploader(deps.Config.BaseURL, deps.Config.UserAgent, deps.Logger),
+		imageCache:    newImageUploadCache(),
+	}
 	if deps.Metrics != nil {
 		r.Use(h.metricsMiddleware)
 	}

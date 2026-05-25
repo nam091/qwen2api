@@ -60,6 +60,25 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 	// Build upstream request
 	upstreamReq := buildQwenRequestFull(oaiReq, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 
+	// Detect inline `data:` image URIs (Claude clients may attach base64
+	// images via the Anthropic image content block, which ToOpenAI maps to a
+	// data URI in image_url). Upload on the first attempt once a token is in
+	// hand.
+	needImageUpload := false
+	if h.deps.Config.Features.Multimodal && h.imageUploader != nil {
+		for _, m := range oaiReq.Messages {
+			for _, p := range m.Parts() {
+				if strings.HasPrefix(p.ImageRef(), "data:") {
+					needImageUpload = true
+					break
+				}
+			}
+			if needImageUpload {
+				break
+			}
+		}
+	}
+
 	maxAttempts := 1
 	if h.deps.Config.Features.RetryOnTokenFailure && h.deps.Config.Retry.MaxAttempts > 1 {
 		maxAttempts = h.deps.Config.Retry.MaxAttempts
@@ -99,6 +118,21 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		token = t
+
+		// Upload inline data-URI images to Qwen OSS on first attempt and
+		// rebuild upstreamReq so resolved OSS URLs go into the multimodal
+		// content array.
+		if attempt == 1 && needImageUpload {
+			if err := h.uploadDataURIsInPlace(r.Context(), token.Value, oaiReq.Messages); err != nil {
+				h.deps.Logger.Warn("claude: upload data-uri images failed; continuing without them", "err", err)
+				h.metricsInc("qwen2api_image_upload_failed_total")
+			}
+			upstreamReq = buildQwenRequestFull(oaiReq, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
+			cacheKey = ""
+			lookupContinuityKey = ""
+			storeContinuityKey = ""
+			needImageUpload = false
+		}
 
 		var chatID string
 		if lookupContinuityKey != "" {

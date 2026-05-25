@@ -7,10 +7,13 @@ import (
 	"time"
 
 	"github.com/keaume34/qwen2api/internal/openai"
+	"github.com/keaume34/qwen2api/internal/ossupload"
 )
 
 type handlers struct {
-	deps Deps
+	deps          Deps
+	imageUploader *ossupload.Uploader
+	imageCache    *imageUploadCache
 }
 
 func (h *handlers) health(w http.ResponseWriter, _ *http.Request) {

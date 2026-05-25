@@ -85,6 +85,23 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 	chatReq.Model = h.deps.Config.ResolveModel(chatReq.Model)
 	upstreamReq := buildQwenRequestFull(chatReq, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 
+	// Detect inline `data:` image URIs so we can upload them to Qwen OSS on
+	// the first attempt (once a token is in hand).
+	needImageUpload := false
+	if h.deps.Config.Features.Multimodal && h.imageUploader != nil {
+		for _, m := range chatReq.Messages {
+			for _, p := range m.Parts() {
+				if strings.HasPrefix(p.ImageRef(), "data:") {
+					needImageUpload = true
+					break
+				}
+			}
+			if needImageUpload {
+				break
+			}
+		}
+	}
+
 	maxAttempts := 1
 	if h.deps.Config.Features.RetryOnTokenFailure && h.deps.Config.Retry.MaxAttempts > 1 {
 		maxAttempts = h.deps.Config.Retry.MaxAttempts
@@ -143,6 +160,22 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		token = t
+
+		// Upload inline data-URI images to Qwen OSS on the first attempt.
+		// Invalidate cache keys built from the pre-upload prompt because the
+		// resolved URLs change the upstream content array's hash.
+		if attempt == 1 && needImageUpload {
+			if err := h.uploadDataURIsInPlace(r.Context(), token.Value, chatReq.Messages); err != nil {
+				h.deps.Logger.Warn("responses: upload data-uri images failed; continuing without them", "err", err)
+				h.metricsInc("qwen2api_image_upload_failed_total")
+			}
+			upstreamReq = buildQwenRequestFull(chatReq, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
+			cacheKey = ""
+			lookupContinuityKey = ""
+			storeContinuityKey = ""
+			prevRespKey = ""
+			needImageUpload = false
+		}
 
 		var chatID string
 		if prevRespKey != "" {

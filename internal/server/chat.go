@@ -56,6 +56,24 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	req.Model = h.deps.Config.ResolveModel(req.Model)
 	upstreamReq := buildQwenRequestFull(req, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 
+	// Detect whether any message contains inline `data:` image URIs that need
+	// to be uploaded to Qwen OSS before the upstream request can succeed.
+	// Upload happens on the first attempt once a token is in hand.
+	needImageUpload := false
+	if h.deps.Config.Features.Multimodal && h.imageUploader != nil {
+		for _, m := range req.Messages {
+			for _, p := range m.Parts() {
+				if strings.HasPrefix(p.ImageRef(), "data:") {
+					needImageUpload = true
+					break
+				}
+			}
+			if needImageUpload {
+				break
+			}
+		}
+	}
+
 	maxAttempts := 1
 	if h.deps.Config.Features.RetryOnTokenFailure && h.deps.Config.Retry.MaxAttempts > 1 {
 		maxAttempts = h.deps.Config.Retry.MaxAttempts
@@ -130,6 +148,23 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		token = t
+
+		// Upload any inline data-URI images to Qwen OSS on the first attempt
+		// only. Rebuild the upstream request so the resolved OSS URLs land
+		// in the multimodal content array. We also invalidate prompt and
+		// continuity cache keys we computed pre-upload because the prompt
+		// hash changes once the data URIs are gone.
+		if attempt == 1 && needImageUpload {
+			if err := h.uploadDataURIsInPlace(r.Context(), token.Value, req.Messages); err != nil {
+				h.deps.Logger.Warn("upload data-uri images failed; continuing without them", "err", err)
+				h.metricsInc("qwen2api_image_upload_failed_total")
+			}
+			upstreamReq = buildQwenRequestFull(req, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
+			cacheKey = ""
+			lookupContinuityKey = ""
+			storeContinuityKey = ""
+			needImageUpload = false
+		}
 
 		if chatID == "" && cacheKey != "" {
 			if cached, ok := h.deps.Cache.Get(cacheKey); ok {
@@ -419,32 +454,39 @@ func buildQwenRequestFull(req openai.ChatRequest, multimodalEnabled bool, thinki
 	}
 
 	extra := map[string]interface{}{}
+	var contentParts []qwen.ContentPart
 	if multimodalEnabled {
 		var allImages []string
 		for _, m := range req.Messages {
 			allImages = append(allImages, m.Images()...)
 		}
+		// Drop data: URIs that the handler couldn't upload (e.g. uploader
+		// unavailable or upload failed) so we don't ship invalid URLs upstream
+		// that crash the vision pipeline with "Internal error".
+		allImages = filterUploadableImageURLs(allImages)
 		if len(allImages) > 0 {
-			extra["files"] = imageFilesPayload(allImages)
-			var imageNote strings.Builder
-			imageNote.WriteString("\n\n[Attached images]\n")
-			for i, url := range allImages {
-				fmt.Fprintf(&imageNote, "%d. %s\n", i+1, url)
+			contentParts = append(contentParts, qwen.ContentPart{Type: "text", Text: collapsed})
+			for _, url := range allImages {
+				contentParts = append(contentParts, qwen.ContentPart{Type: "image", Image: url})
 			}
-			collapsed += imageNote.String()
 		}
 	}
 
-	msgs := []qwen.Message{{
+	msg := qwen.Message{
 		Role:     "user",
-		Content:  collapsed,
 		ChatType: chatType,
 		Extra:    extra,
 		FeatureConfig: &qwen.FeatureConfig{
 			OutputSchema:    "phase",
 			ThinkingEnabled: thinkingEnabled,
 		},
-	}}
+	}
+	if len(contentParts) > 0 {
+		msg.ContentParts = contentParts
+	} else {
+		msg.Content = collapsed
+	}
+	msgs := []qwen.Message{msg}
 
 	return qwen.CompletionRequest{
 		ChatType:    chatType,
@@ -457,14 +499,22 @@ func buildQwenRequestFull(req openai.ChatRequest, multimodalEnabled bool, thinki
 	}
 }
 
-// imageFilesPayload renders image URLs into the structure Qwen's web client uses.
-func imageFilesPayload(urls []string) []map[string]any {
-	out := make([]map[string]any, 0, len(urls))
+// filterUploadableImageURLs drops `data:` URIs that should have been uploaded
+// upstream already. By the time buildQwenRequestFull runs, the chat handler is
+// expected to have replaced every data URI with a Qwen-OSS HTTPS URL via
+// uploadDataURIsInPlace. Anything still starting with `data:` here is a sign
+// that upload failed; we drop it rather than forwarding an inline data URI
+// which qwen.ai's vision model can't fetch.
+func filterUploadableImageURLs(urls []string) []string {
+	if len(urls) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(urls))
 	for _, u := range urls {
-		out = append(out, map[string]any{
-			"type": "image",
-			"url":  u,
-		})
+		if strings.HasPrefix(u, "data:") {
+			continue
+		}
+		out = append(out, u)
 	}
 	return out
 }

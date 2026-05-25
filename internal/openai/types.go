@@ -59,14 +59,66 @@ func (m ChatMessage) Text() string {
 	return ""
 }
 
-// ContentPart describes one element of a multimodal message body.
+// ContentPart describes one element of a multimodal message body. The
+// `image_url` field accepts either OpenAI's nested-object form
+// (`{url: "..."}`) or the Codex CLI form where it is a plain string. The
+// Qwen-native `image` field (string URL) is also recognised so messages
+// echoed back through conversation history don't lose image context.
 type ContentPart struct {
-	Type     string `json:"type"`
-	Text     string `json:"text,omitempty"`
-	ImageURL *struct {
+	Type     string         `json:"type,omitempty"`
+	Text     string         `json:"text,omitempty"`
+	ImageURL ContentImageRef `json:"image_url,omitempty"`
+	// InputImage is the codex `input_image.url` form (objects with a url
+	// field, used by some Responses API clients).
+	InputImage ContentImageRef `json:"input_image,omitempty"`
+	// Image is the Qwen-native string form: {type:"image", image:"<URL>"}.
+	Image string `json:"image,omitempty"`
+}
+
+// ContentImageRef holds an image reference that may arrive as either a plain
+// string URL or as a nested object with `url` and optional `detail` fields.
+type ContentImageRef struct {
+	URL    string
+	Detail string
+}
+
+// UnmarshalJSON accepts both string and object encodings of image refs.
+func (r *ContentImageRef) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 || string(data) == "null" {
+		return nil
+	}
+	var s string
+	if err := json.Unmarshal(data, &s); err == nil {
+		r.URL = s
+		return nil
+	}
+	var obj struct {
 		URL    string `json:"url"`
 		Detail string `json:"detail,omitempty"`
-	} `json:"image_url,omitempty"`
+	}
+	if err := json.Unmarshal(data, &obj); err != nil {
+		return err
+	}
+	r.URL = obj.URL
+	r.Detail = obj.Detail
+	return nil
+}
+
+// MarshalJSON keeps the nested-object form on the way out for OpenAI clients
+// that expect it.
+func (r ContentImageRef) MarshalJSON() ([]byte, error) {
+	if r.URL == "" {
+		return []byte("null"), nil
+	}
+	if r.Detail == "" {
+		return json.Marshal(struct {
+			URL string `json:"url"`
+		}{URL: r.URL})
+	}
+	return json.Marshal(struct {
+		URL    string `json:"url"`
+		Detail string `json:"detail"`
+	}{URL: r.URL, Detail: r.Detail})
 }
 
 // Parts returns the structured content parts for a multimodal message. Returns
@@ -86,15 +138,36 @@ func (m ChatMessage) Parts() []ContentPart {
 	return nil
 }
 
-// Images returns image URLs contained in a multimodal message body.
+// Images returns image URLs contained in a multimodal message body. Recognises
+// OpenAI's `image_url`, Codex's `input_image`, and Qwen-native `image` shapes.
 func (m ChatMessage) Images() []string {
 	var out []string
 	for _, p := range m.Parts() {
-		if p.Type == "image_url" && p.ImageURL != nil && p.ImageURL.URL != "" {
-			out = append(out, p.ImageURL.URL)
+		if url := p.ImageRef(); url != "" {
+			out = append(out, url)
 		}
 	}
 	return out
+}
+
+// ImageRef returns the underlying image URL of a content part, picking from
+// whichever field carries it.
+func (p ContentPart) ImageRef() string {
+	switch p.Type {
+	case "image_url", "input_image", "image":
+		// fall through to lookup below
+	default:
+		if p.Type != "" && p.ImageURL.URL == "" && p.InputImage.URL == "" && p.Image == "" {
+			return ""
+		}
+	}
+	if p.ImageURL.URL != "" {
+		return p.ImageURL.URL
+	}
+	if p.InputImage.URL != "" {
+		return p.InputImage.URL
+	}
+	return p.Image
 }
 
 // ChatCompletion is the non-streaming response envelope.

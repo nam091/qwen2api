@@ -16,6 +16,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	oss "github.com/aliyun/aliyun-oss-go-sdk/oss"
 )
 
 // MaxFileSize is the maximum upload size (100MB).
@@ -31,6 +33,9 @@ var AllowedExtensions = map[string]bool{
 	".r": true, ".swift": true, ".kt": true, ".scala": true, ".toml": true,
 	".ini": true, ".cfg": true, ".conf": true, ".log": true, ".csv": true,
 	".pdf": true, ".doc": true, ".docx": true,
+	// Image types — for vision-capable models.
+	".png": true, ".jpg": true, ".jpeg": true, ".gif": true,
+	".webp": true, ".bmp": true,
 }
 
 // STSCredentials holds temporary OSS credentials.
@@ -161,30 +166,42 @@ func (u *Uploader) RequestSTS(ctx context.Context, token, filename string, files
 }
 
 // UploadToOSS uploads file content to Alibaba Cloud OSS using STS credentials.
-func (u *Uploader) UploadToOSS(ctx context.Context, sts *STSResponse, content []byte) error {
-	// Construct OSS PUT URL
-	ossURL := fmt.Sprintf("https://%s.%s/%s", sts.FileInfo.Bucket, sts.FileInfo.Endpoint, sts.FileInfo.Path)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, ossURL, bytes.NewReader(content))
+// Uses the official ali-oss SDK to handle OSS V4 (HMAC-SHA256) signing, which
+// is required by chat.qwen.ai's OSS bucket policy.
+func (u *Uploader) UploadToOSS(ctx context.Context, sts *STSResponse, content []byte, mimeType string) error {
+	endpoint := "https://" + sts.FileInfo.Endpoint
+	client, err := oss.New(endpoint,
+		sts.Credentials.AccessKeyID,
+		sts.Credentials.AccessKeySecret,
+		oss.SecurityToken(sts.Credentials.SecurityToken),
+		oss.AuthVersion(oss.AuthV4),
+		oss.Region(regionFromEndpoint(sts.FileInfo.Endpoint)),
+	)
 	if err != nil {
-		return fmt.Errorf("create oss request: %w", err)
+		return fmt.Errorf("oss client: %w", err)
 	}
-	req.Header.Set("x-oss-security-token", sts.Credentials.SecurityToken)
-	req.ContentLength = int64(len(content))
-
-	resp, err := u.client.Do(req)
+	bucket, err := client.Bucket(sts.FileInfo.Bucket)
 	if err != nil {
+		return fmt.Errorf("oss bucket: %w", err)
+	}
+	opts := []oss.Option{oss.ContentLength(int64(len(content)))}
+	if mimeType != "" {
+		opts = append(opts, oss.ContentType(mimeType))
+	}
+	if err := bucket.PutObject(sts.FileInfo.Path, bytes.NewReader(content), opts...); err != nil {
 		return fmt.Errorf("oss upload: %w", err)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("oss upload failed (%d): %s", resp.StatusCode, truncate(string(body), 256))
-	}
-
 	u.logger.Info("oss upload success", "file_id", sts.FileInfo.ID, "path", sts.FileInfo.Path)
+	_ = ctx // SDK manages its own timeouts; keep ctx for signature compatibility.
 	return nil
+}
+
+// regionFromEndpoint extracts the OSS region code from an endpoint like
+// "ap-southeast-1.aliyuncs.com" or "oss-accelerate.aliyuncs.com".
+func regionFromEndpoint(endpoint string) string {
+	host := strings.TrimSuffix(endpoint, ".aliyuncs.com")
+	host = strings.TrimPrefix(host, "oss-")
+	return host
 }
 
 // Upload performs the full upload workflow: STS token → OSS upload.
@@ -202,7 +219,8 @@ func (u *Uploader) Upload(ctx context.Context, token, filename string, content [
 		return nil, fmt.Errorf("request sts: %w", err)
 	}
 
-	if err := u.UploadToOSS(ctx, sts, content); err != nil {
+	mimeType := mime.TypeByExtension(ext)
+	if err := u.UploadToOSS(ctx, sts, content, mimeType); err != nil {
 		return nil, fmt.Errorf("upload to oss: %w", err)
 	}
 
