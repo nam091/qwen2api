@@ -187,6 +187,38 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
+		// chat.qwen.ai returns an empty stream when the chat_id has
+		// already been used for a completion. Detect that and retry with
+		// a fresh chat_id before any bytes are sent to the client.
+		if cacheHit {
+			replay, isEmpty, dbg := preflightChatIDReuseDebug(body)
+			h.deps.Logger.Debug("preflight cache reuse check", "chat_id", chatID, "model", upstreamReq.Model, "empty", isEmpty, "debug", dbg)
+			if isEmpty {
+				h.metricsInc("qwen2api_cache_empty_reuse_total")
+				h.deps.Logger.Warn("cache hit produced empty upstream stream; invalidating and retrying", "chat_id", chatID, "model", upstreamReq.Model, "preflight", dbg)
+				if cacheKey != "" {
+					h.deps.Cache.Invalidate(cacheKey)
+				}
+				if lookupContinuityKey != "" {
+					h.deps.Cache.Invalidate(lookupContinuityKey)
+				}
+				if storeContinuityKey != "" {
+					h.deps.Cache.Invalidate(storeContinuityKey)
+				}
+				cacheHit = false
+				chatID = ""
+				body = nil
+				// Force a fresh /chats/new + Completions on the next
+				// iteration. Bump retries so dashboards reflect it.
+				retries++
+				if attempt >= maxAttempts {
+					maxAttempts = attempt + 1
+				}
+				continue
+			}
+			body = replay
+		}
+
 		// Bind session affinity on success
 		if sessionKey != "" && chatID != "" {
 			h.deps.Affinity.Bind(sessionKey, token.Value, chatID)

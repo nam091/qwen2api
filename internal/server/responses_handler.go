@@ -221,6 +221,38 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 			h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, cmpErr)
 			return
 		}
+
+		// chat.qwen.ai returns an empty stream on chat_id reuse. Detect
+		// and retry with a fresh chat_id before the client sees anything.
+		if cacheHit {
+			replay, isEmpty, dbg := preflightChatIDReuseDebug(body)
+			h.deps.Logger.Debug("responses: preflight cache reuse check", "chat_id", chatID, "model", upstreamReq.Model, "empty", isEmpty, "debug", dbg)
+			if isEmpty {
+				h.metricsInc("qwen2api_cache_empty_reuse_total")
+				h.deps.Logger.Warn("responses: cache hit produced empty upstream stream; invalidating and retrying", "chat_id", chatID, "model", upstreamReq.Model, "preflight", dbg)
+				if prevRespKey != "" {
+					h.deps.Cache.Invalidate(prevRespKey)
+				}
+				if lookupContinuityKey != "" {
+					h.deps.Cache.Invalidate(lookupContinuityKey)
+				}
+				if storeContinuityKey != "" {
+					h.deps.Cache.Invalidate(storeContinuityKey)
+				}
+				if cacheKey != "" {
+					h.deps.Cache.Invalidate(cacheKey)
+				}
+				cacheHit = false
+				body = nil
+				retries++
+				if attempt >= maxAttempts {
+					maxAttempts = attempt + 1
+				}
+				continue
+			}
+			body = replay
+		}
+
 		activeChatID = chatID
 		break
 	}

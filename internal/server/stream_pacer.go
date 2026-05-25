@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
@@ -135,3 +136,176 @@ func writeSSEKeepAlive(w http.ResponseWriter, flusher http.Flusher) {
 // quick-tunnel kills idle conns after ~100s, and most reverse proxies
 // (nginx, traefik) default to 60s. 10s leaves ample headroom.
 const defaultStreamKeepAlive = 10 * time.Second
+
+// preflightChatIDReuse handles a subtle but high-impact upstream quirk:
+// chat.qwen.ai returns an EMPTY stream (zero content delta, immediate
+// finish_reason="stop", roughly 0.25s) whenever you POST a completion on
+// a chat_id that has already been used for a prior completion. Our cache
+// layer (prompt cache + conversation continuity) routinely reuses
+// chat_ids to skip the /chats/new round-trip — so without intervention,
+// any cached request silently returns nothing to the client.
+//
+// preflightChatIDReuse buffers upstream bytes via a TeeReader, walks the
+// SSE events with a small look-ahead until we either:
+//   - see an actual content delta -> safe to forward; returns a
+//     "replay" io.ReadCloser that hands back the buffered bytes first,
+//     then continues to read fresh bytes from the upstream.
+//   - hit finish_reason or [DONE] with no content -> the upstream is
+//     empty; returns isEmpty=true so the caller can invalidate cache,
+//     re-issue NewChat, and retry the completion before the client sees
+//     any of this.
+//
+// Look-ahead is bounded by maxEvents and maxBufferBytes so a pathological
+// upstream cannot wedge the request. If the bound is hit before we can
+// decide, we return the buffered body as-is (isEmpty=false) so the
+// downstream path runs unchanged.
+//
+// Only call when the chat_id was reused (cacheHit=true). For fresh
+// chat_ids the upstream cannot be in the broken state, so skipping the
+// preflight saves first-byte latency.
+func preflightChatIDReuse(body io.ReadCloser) (replay io.ReadCloser, isEmpty bool, err error) {
+	r, e, _ := preflightChatIDReuseDebug(body)
+	return r, e, nil
+}
+
+// preflightChatIDReuseDebug is the same as preflightChatIDReuse but also
+// returns a short debug summary of what the preflight observed
+// (event count, flags, and a preview of buffered bytes). Used by
+// handlers for slog visibility when the empty branch (or its absence)
+// needs explaining.
+func preflightChatIDReuseDebug(body io.ReadCloser) (replay io.ReadCloser, isEmpty bool, debug string) {
+	const (
+		maxEvents      = 6
+		maxBufferBytes = 64 * 1024
+	)
+	var buf bytes.Buffer
+	limited := &capturedReader{src: body, sink: &buf, cap: maxBufferBytes}
+	reader := qwen.NewStreamReader(limited)
+
+	sawContent := false
+	sawFinish := false
+	sawDone := false
+	events := 0
+	for events < maxEvents {
+		evt, e := reader.Next()
+		if e == io.EOF {
+			break
+		}
+		if e != nil {
+			return newReplayBody(buf.Bytes(), body), false,
+				fmt.Sprintf("events=%d err=%q preview=%q", events, e.Error(), shortBytes(buf.Bytes()))
+		}
+		events++
+		if evt.Done {
+			sawDone = true
+			break
+		}
+		if evt.Comment != "" {
+			continue
+		}
+		if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
+			continue
+		}
+		ch := evt.Delta.Choices[0]
+		if ch.Delta.Content != "" {
+			sawContent = true
+			break
+		}
+		if ch.FinishReason != nil {
+			sawFinish = true
+		}
+		if buf.Len() >= maxBufferBytes {
+			break
+		}
+	}
+
+	// qwen.ai surfaces chat_id-reuse failures in two different shapes
+	// depending on internal state:
+	//   1) SSE-shaped: events with empty deltas + finish_reason="stop"
+	//      and a final [DONE] (sawFinish/sawDone branch below).
+	//   2) Non-SSE JSON envelope on a 200 OK ("the chat is not exist",
+	//      no "data:" prefix). The Scanner consumes the line but
+	//      can't parse it as an event, so we observe events==0 with a
+	//      non-empty buffer (the JSON body) and EOF.
+	// Both must be treated as "empty on reuse" so the caller retries.
+	bodyBytes := buf.Bytes()
+	nonSSEPayload := events == 0 && len(bytes.TrimSpace(bodyBytes)) > 0
+	dbg := fmt.Sprintf("events=%d content=%v finish=%v done=%v nonsse=%v preview=%q",
+		events, sawContent, sawFinish, sawDone, nonSSEPayload, shortBytes(bodyBytes))
+	if !sawContent && (sawFinish || sawDone || nonSSEPayload) {
+		_ = body.Close()
+		return nil, true, dbg
+	}
+	return newReplayBody(bodyBytes, body), false, dbg
+}
+
+func shortBytes(b []byte) string {
+	if len(b) > 256 {
+		b = b[:256]
+	}
+	return string(b)
+}
+
+// capturedReader is io.TeeReader-equivalent with an explicit byte cap.
+// Once cap is reached, reads pass through to src without further capture.
+type capturedReader struct {
+	src     io.Reader
+	sink    *bytes.Buffer
+	cap     int
+	dropped bool
+}
+
+func (c *capturedReader) Read(p []byte) (int, error) {
+	n, err := c.src.Read(p)
+	if n > 0 && !c.dropped {
+		room := c.cap - c.sink.Len()
+		if room > 0 {
+			toCapture := n
+			if toCapture > room {
+				toCapture = room
+			}
+			_, _ = c.sink.Write(p[:toCapture])
+			if toCapture < n {
+				c.dropped = true
+			}
+		} else {
+			c.dropped = true
+		}
+	}
+	return n, err
+}
+
+// replayBody serves a fixed byte prefix, then continues from the wrapped
+// body. Closing the replay closes the underlying body once.
+type replayBody struct {
+	prefix io.Reader
+	body   io.ReadCloser
+	closed bool
+}
+
+func newReplayBody(prefix []byte, body io.ReadCloser) *replayBody {
+	return &replayBody{prefix: bytes.NewReader(prefix), body: body}
+}
+
+func (r *replayBody) Read(p []byte) (int, error) {
+	if r.prefix != nil {
+		n, err := r.prefix.Read(p)
+		if n > 0 {
+			return n, nil
+		}
+		// Prefix exhausted.
+		r.prefix = nil
+		if err != nil && err != io.EOF {
+			return n, err
+		}
+	}
+	return r.body.Read(p)
+}
+
+func (r *replayBody) Close() error {
+	if r.closed {
+		return nil
+	}
+	r.closed = true
+	return r.body.Close()
+}

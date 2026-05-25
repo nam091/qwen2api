@@ -166,6 +166,34 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 			h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusBadGateway, time.Since(start), false, retries, cmpErr)
 			return
 		}
+
+		// chat.qwen.ai returns an empty stream on chat_id reuse. Detect
+		// and retry with a fresh chat_id before the client sees anything.
+		if cacheHit {
+			replay, isEmpty, dbg := preflightChatIDReuseDebug(body)
+			h.deps.Logger.Debug("claude: preflight cache reuse check", "chat_id", chatID, "model", upstreamReq.Model, "empty", isEmpty, "debug", dbg)
+			if isEmpty {
+				h.metricsInc("qwen2api_cache_empty_reuse_total")
+				h.deps.Logger.Warn("claude: cache hit produced empty upstream stream; invalidating and retrying", "chat_id", chatID, "model", upstreamReq.Model, "preflight", dbg)
+				if cacheKey != "" {
+					h.deps.Cache.Invalidate(cacheKey)
+				}
+				if lookupContinuityKey != "" {
+					h.deps.Cache.Invalidate(lookupContinuityKey)
+				}
+				if storeContinuityKey != "" {
+					h.deps.Cache.Invalidate(storeContinuityKey)
+				}
+				cacheHit = false
+				body = nil
+				retries++
+				if attempt >= maxAttempts {
+					maxAttempts = attempt + 1
+				}
+				continue
+			}
+			body = replay
+		}
 		break
 	}
 

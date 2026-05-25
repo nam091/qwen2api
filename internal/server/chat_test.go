@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -17,6 +18,39 @@ import (
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/tokenpool"
 )
+
+// newTestServerWithCache is like newTestServer but with a real
+// promptcache attached and PromptCaching feature enabled, so cache-hit
+// behaviour (and the empty-on-reuse retry) can be exercised.
+func newTestServerWithCache(t *testing.T, upstream *httptest.Server) http.Handler {
+	t.Helper()
+	cfg := config.Config{
+		Port:            5001,
+		APIKeys:         []config.APIKey{{Value: "sk-test"}},
+		Tokens:          []config.Token{{Value: "tok-1"}},
+		BaseURL:         upstream.URL,
+		CooldownSeconds: 60,
+		LogLevel:        "error",
+		Retry:           config.RetryConfig{MaxAttempts: 3},
+		Features: config.FeatureToggles{
+			APIKeyRotation: true,
+			PromptCaching:  true,
+		},
+	}
+	client := qwen.NewClient(qwen.ClientConfig{
+		BaseURL:        upstream.URL,
+		TimeoutSeconds: 10,
+	})
+	pool := tokenpool.New(cfg.Tokens, time.Minute)
+	cache := promptcache.New(1024, time.Minute)
+	return New(Deps{
+		Config:    &cfg,
+		Logger:    slog.Default(),
+		Qwen:      client,
+		TokenPool: pool,
+		Cache:     cache,
+	})
+}
 
 func newTestServer(t *testing.T, upstream *httptest.Server) http.Handler {
 	t.Helper()
@@ -962,5 +996,169 @@ func TestChatStreamForwardsUpstreamKeepalives(t *testing.T) {
 	}
 	if !strings.Contains(out, `"content":"a"`) || !strings.Contains(out, `"content":"b"`) {
 		t.Errorf("expected both data frames to survive; got: %s", out)
+	}
+}
+
+// TestPreflightChatIDReuseDetectsEmpty verifies that an upstream stream
+// containing only finish_reason+no-content is correctly classified as
+// "empty due to chat_id reuse".
+func TestPreflightChatIDReuseDetectsEmpty(t *testing.T) {
+	body := strings.Join([]string{
+		`data: {"choices":[{"delta":{"role":"assistant"}}]}`,
+		``,
+		`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		``,
+		`data: [DONE]`,
+		``,
+		``,
+	}, "\n")
+	rc := io.NopCloser(strings.NewReader(body))
+	replay, isEmpty, err := preflightChatIDReuse(rc)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !isEmpty {
+		t.Fatalf("expected isEmpty=true (replay would still be: %v)", replay != nil)
+	}
+	if replay != nil {
+		t.Fatalf("expected replay=nil when isEmpty=true")
+	}
+}
+
+// TestPreflightChatIDReuseDetectsJSONError verifies the second qwen.ai
+// failure shape on chat_id reuse: HTTP 200 with a plain JSON envelope
+// (no SSE framing) that says the chat doesn't exist. preflight must
+// classify this as empty too.
+func TestPreflightChatIDReuseDetectsJSONError(t *testing.T) {
+	body := `{"success":false,"data":{"code":"Bad_Request","details":"Invalid input the chat 295d9706 is not exist."}}`
+	rc := io.NopCloser(strings.NewReader(body))
+	replay, isEmpty, err := preflightChatIDReuse(rc)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !isEmpty {
+		t.Fatalf("expected isEmpty=true for non-SSE JSON error envelope (replay=%v)", replay != nil)
+	}
+}
+
+// TestPreflightChatIDReuseAllowsContentThrough verifies that when the
+// upstream actually produces content, we return a replay body whose
+// bytes are byte-identical to the original. This guarantees the
+// downstream parser sees the same stream it would have without the
+// preflight in front of it.
+func TestPreflightChatIDReuseAllowsContentThrough(t *testing.T) {
+	body := strings.Join([]string{
+		`data: {"choices":[{"delta":{"role":"assistant"}}]}`,
+		``,
+		`data: {"choices":[{"delta":{"content":"hello"}}]}`,
+		``,
+		`data: {"choices":[{"delta":{"content":" world"}}]}`,
+		``,
+		`data: {"choices":[{"delta":{},"finish_reason":"stop"}]}`,
+		``,
+		`data: [DONE]`,
+		``,
+		``,
+	}, "\n")
+	rc := io.NopCloser(strings.NewReader(body))
+	replay, isEmpty, err := preflightChatIDReuse(rc)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if isEmpty {
+		t.Fatalf("expected isEmpty=false for a stream with content")
+	}
+	if replay == nil {
+		t.Fatalf("expected non-nil replay")
+	}
+	got, _ := io.ReadAll(replay)
+	if string(got) != body {
+		t.Fatalf("replay must reproduce the original bytes\nwant:\n%s\ngot:\n%s", body, string(got))
+	}
+}
+
+// TestChatStreamRetriesEmptyCachedChatID is the end-to-end variant of
+// the preflight test. A fake upstream tracks every chat_id it has seen
+// before; on the SECOND completion call with the same chat_id it
+// returns the empty / no-content stream that real chat.qwen.ai produces
+// on chat_id reuse. Two back-to-back requests with the same prompt
+// would normally hit the prompt cache and trigger the bug; the gateway
+// must invalidate the stale chat_id, allocate a fresh one via
+// /chats/new, retry, and finally stream real content to the client.
+func TestChatStreamRetriesEmptyCachedChatID(t *testing.T) {
+	var (
+		mu              sync.Mutex
+		seenChatIDs     = map[string]int{}
+		newChatCalls    int
+		completionCalls int
+	)
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/chats/new", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		newChatCalls++
+		id := fmt.Sprintf("chat-fresh-%d", newChatCalls)
+		mu.Unlock()
+		fmt.Fprintf(w, `{"data":{"id":%q}}`, id)
+	})
+	mux.HandleFunc("/api/v2/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		completionCalls++
+		chatID := r.URL.Query().Get("chat_id")
+		uses := seenChatIDs[chatID]
+		seenChatIDs[chatID] = uses + 1
+		mu.Unlock()
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl, _ := w.(http.Flusher)
+		write := func(s string) {
+			fmt.Fprint(w, s)
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		if uses >= 1 {
+			// Reused chat_id -> empty stream, like real qwen.ai.
+			write("data: " + `{"choices":[{"delta":{"role":"assistant"}}]}` + "\n\n")
+			write("data: " + `{"choices":[{"delta":{},"finish_reason":"stop"}]}` + "\n\n")
+			write("data: [DONE]\n\n")
+			return
+		}
+		write("data: " + `{"choices":[{"delta":{"role":"assistant","content":"hello "}}]}` + "\n\n")
+		write("data: " + `{"choices":[{"delta":{"content":"world"}}]}` + "\n\n")
+		write("data: " + `{"choices":[{"delta":{},"finish_reason":"stop"}]}` + "\n\n")
+		write("data: [DONE]\n\n")
+	})
+	upstream := httptest.NewServer(mux)
+	defer upstream.Close()
+
+	h := newTestServerWithCache(t, upstream)
+
+	doRequest := func(label string) string {
+		body := `{"model":"qwen3-max","stream":true,"messages":[{"role":"user","content":"go"}]}`
+		req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+		req.Header.Set("Authorization", "Bearer sk-test")
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		out := rec.Body.String()
+		if !strings.Contains(out, `"content":"hello "`) || !strings.Contains(out, `"content":"world"`) {
+			t.Fatalf("%s: expected real content; got:\n%s", label, out)
+		}
+		return out
+	}
+
+	// First request: cache miss -> create chat_id A -> real content.
+	doRequest("first")
+	// Second request: cache HIT on chat_id A -> upstream sees A reused
+	// -> empty -> gateway must retry with fresh chat_id B -> real content.
+	doRequest("second")
+
+	mu.Lock()
+	defer mu.Unlock()
+	if completionCalls != 3 {
+		t.Fatalf("expected 3 completion calls (req1=1 + req2=empty+retry=2), got %d", completionCalls)
+	}
+	if newChatCalls != 2 {
+		t.Fatalf("expected 2 /chats/new calls (initial + retry), got %d", newChatCalls)
 	}
 }
