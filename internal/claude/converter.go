@@ -101,7 +101,7 @@ func convertMessage(msg Message) (openai.ChatMessage, error) {
 			if part.Type == "tool_result" {
 				return openai.ChatMessage{
 					Role:       "tool",
-					Content:    json.RawMessage(fmt.Sprintf(`"%s"`, escapeJSON(part.Content))),
+					Content:    json.RawMessage(fmt.Sprintf(`"%s"`, escapeJSON(string(part.Content)))),
 					ToolCallID: part.ToolUseID,
 				}, nil
 			}

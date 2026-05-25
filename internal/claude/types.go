@@ -90,6 +90,36 @@ func (m *Message) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("message content must be a string or an array of content blocks")
 }
 
+// ToolResultContent is a custom type that can unmarshal from either a string or an
+// array of content blocks (for tool_result blocks).
+type ToolResultContent string
+
+func (trc *ToolResultContent) UnmarshalJSON(data []byte) error {
+	if len(data) == 0 {
+		return nil
+	}
+	var str string
+	if err := json.Unmarshal(data, &str); err == nil {
+		*trc = ToolResultContent(str)
+		return nil
+	}
+	var parts []struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(data, &parts); err == nil {
+		var combined string
+		for _, p := range parts {
+			if p.Type == "text" || p.Type == "" {
+				combined += p.Text
+			}
+		}
+		*trc = ToolResultContent(combined)
+		return nil
+	}
+	return fmt.Errorf("tool_result content must be a string or an array of content blocks")
+}
+
 // ContentPart can be text, image, or tool_use/tool_result.
 type ContentPart struct {
 	Type string `json:"type"`
@@ -106,9 +136,9 @@ type ContentPart struct {
 	Input json.RawMessage `json:"input,omitempty"`
 
 	// For type="tool_result"
-	ToolUseID string `json:"tool_use_id,omitempty"`
-	Content   string `json:"content,omitempty"`
-	IsError   bool   `json:"is_error,omitempty"`
+	ToolUseID string            `json:"tool_use_id,omitempty"`
+	Content   ToolResultContent `json:"content,omitempty"`
+	IsError   bool              `json:"is_error,omitempty"`
 }
 
 // MarshalJSON ensures "text" field is always present for text-type content blocks.
