@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -181,7 +183,7 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 	}
 	msgID := "msg_" + uuid.NewString()
 	if req.Stream {
-		h.streamClaudeResponse(w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
+		h.streamClaudeResponse(r.Context(), w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
 	} else {
 		h.aggregateClaudeResponse(w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
 	}
@@ -191,7 +193,7 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 
 // streamClaudeResponse reads raw Qwen SSE, applies thinking wrapping and tool
 // detection, and emits a well-formed Claude Messages SSE stream.
-func (h *handlers) streamClaudeResponse(w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool) {
+func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -260,69 +262,79 @@ func (h *handlers) streamClaudeResponse(w http.ResponseWriter, body io.ReadClose
 
 	stopReason := "end_turn"
 
-	for {
-		evt, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			h.deps.Logger.Warn("claude stream read error", "err", err)
-			break
-		}
-		if evt.Done {
-			break
-		}
-		if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
-			if evt.Delta != nil && evt.Delta.Usage != nil {
-				if evt.Delta.Usage.InputTokens > 0 {
-					inputTokens = evt.Delta.Usage.InputTokens
-				}
-				if evt.Delta.Usage.OutputTokens > 0 {
-					outputTokens = evt.Delta.Usage.OutputTokens
-				}
+	pacer := newStreamPacer(reader, defaultStreamKeepAlive)
+	loopErr := pacer.loop(ctx,
+		func(evt qwen.StreamEvent) error {
+			if evt.Done {
+				return nil
 			}
-			continue
-		}
-		choice := evt.Delta.Choices[0]
-		text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
-		inThinking = next
-		if text != "" {
-			fullContent.WriteString(text)
-		}
+			if evt.Comment != "" {
+				writeSSEKeepAlive(w, flusher)
+				return nil
+			}
+			if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
+				if evt.Delta != nil && evt.Delta.Usage != nil {
+					if evt.Delta.Usage.InputTokens > 0 {
+						inputTokens = evt.Delta.Usage.InputTokens
+					}
+					if evt.Delta.Usage.OutputTokens > 0 {
+						outputTokens = evt.Delta.Usage.OutputTokens
+					}
+				}
+				return nil
+			}
+			choice := evt.Delta.Choices[0]
+			text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
+			inThinking = next
+			if text != "" {
+				fullContent.WriteString(text)
+			}
 
-		if hasTools && !triggered {
-			accumulated := fullContent.String()
-			if strings.Contains(accumulated, "<tool_call") {
-				triggered = true
-			} else {
-				// Keep a small look-behind so we don't split a multi-byte rune
-				// or a partial <tool_call tag.
-				safe := len(accumulated) - len("<tool_call")
-				for safe > emittedLen && !utf8.RuneStart(accumulated[safe]) {
-					safe--
+			if hasTools && !triggered {
+				accumulated := fullContent.String()
+				if strings.Contains(accumulated, "<tool_call") {
+					triggered = true
+				} else {
+					// Keep a small look-behind so we don't split a multi-byte rune
+					// or a partial <tool_call tag.
+					safe := len(accumulated) - len("<tool_call")
+					for safe > emittedLen && !utf8.RuneStart(accumulated[safe]) {
+						safe--
+					}
+					if safe > emittedLen {
+						chunkStr := accumulated[emittedLen:safe]
+						emitTextDelta(chunkStr)
+						emittedLen = safe
+					}
 				}
-				if safe > emittedLen {
-					chunkStr := accumulated[emittedLen:safe]
-					emitTextDelta(chunkStr)
-					emittedLen = safe
-				}
+			} else if !hasTools {
+				// No tool support — just stream text deltas directly.
+				emitTextDelta(text)
+				emittedLen = fullContent.Len()
 			}
-		} else if !hasTools {
-			// No tool support — just stream text deltas directly.
-			emitTextDelta(text)
-			emittedLen = fullContent.Len()
-		}
 
-		if choice.FinishReason != nil {
-			switch *choice.FinishReason {
-			case "stop":
-				stopReason = "end_turn"
-			case "length":
-				stopReason = "max_tokens"
-			case "tool_calls":
-				stopReason = "tool_use"
+			if choice.FinishReason != nil {
+				switch *choice.FinishReason {
+				case "stop":
+					stopReason = "end_turn"
+				case "length":
+					stopReason = "max_tokens"
+				case "tool_calls":
+					stopReason = "tool_use"
+				}
 			}
-		}
+			return nil
+		},
+		func() { writeSSEKeepAlive(w, flusher) },
+	)
+	if loopErr != nil && !errors.Is(loopErr, context.Canceled) {
+		h.deps.Logger.Warn("claude stream read error", "err", loopErr)
+		// Upstream cut mid-stream — signal truncation so claude-code can
+		// detect it instead of silently treating the response as complete.
+		stopReason = "max_tokens"
+	}
+	if errors.Is(loopErr, context.Canceled) {
+		return
 	}
 
 	// If we ended while still in a thinking phase, close the tag.

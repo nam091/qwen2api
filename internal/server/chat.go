@@ -2,6 +2,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -213,7 +214,7 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			_ = body.Close()
 		}()
-		h.proxyStream(w, body, completionID, created, req.Model, hasTools)
+		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 		h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
 		return
@@ -657,16 +658,16 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 }
 
 // proxyStream re-emits upstream events as OpenAI-style SSE chunks.
-func (h *handlers) proxyStream(w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool) {
+func (h *handlers) proxyStream(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool) {
 	if hasTools {
-		h.proxyStreamWithToolDetection(w, body, id, created, model)
+		h.proxyStreamWithToolDetection(ctx, w, body, id, created, model)
 		return
 	}
-	h.proxyStreamDirect(w, body, id, created, model)
+	h.proxyStreamDirect(ctx, w, body, id, created, model)
 }
 
 // proxyStreamDirect is the original streaming path with no tool detection.
-func (h *handlers) proxyStreamDirect(w http.ResponseWriter, body io.Reader, id string, created int64, model string) {
+func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string) {
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -695,44 +696,63 @@ func (h *handlers) proxyStreamDirect(w http.ResponseWriter, body io.Reader, id s
 		flush()
 	}
 
-	for {
-		evt, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			h.deps.Logger.Warn("stream read error", "err", err)
-			break
-		}
-		if evt.Done {
-			break
-		}
-		if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
-			continue
-		}
-		choice := evt.Delta.Choices[0]
-		role := ""
-		if !roleSent {
-			role = "assistant"
-			roleSent = true
-		}
-		text := choice.Delta.Content
-		text, inThinking = wrapThinking(text, choice.Delta.Phase, inThinking)
-		if text == "" && role == "" && choice.FinishReason == nil {
-			continue
-		}
-		chunk := openai.StreamChunk{
-			ID:      id,
-			Object:  "chat.completion.chunk",
-			Created: created,
-			Model:   model,
-			Choices: []openai.StreamChoice{{
-				Index:        0,
-				Delta:        openai.Delta{Role: role, Content: text},
-				FinishReason: choice.FinishReason,
-			}},
-		}
-		emit(chunk)
+	// Track whether the upstream finished cleanly (EOF / [DONE]) or was
+	// cut mid-stream. A mid-stream cut becomes finish_reason="length" so
+	// clients can detect truncation and decide whether to retry.
+	upstreamFinish := "stop"
+
+	pacer := newStreamPacer(reader, defaultStreamKeepAlive)
+	loopErr := pacer.loop(ctx,
+		func(evt qwen.StreamEvent) error {
+			if evt.Done {
+				return nil
+			}
+			if evt.Comment != "" {
+				// Forward upstream keepalive comments so the client's
+				// idle timer keeps resetting.
+				writeSSEKeepAlive(w, flusher)
+				return nil
+			}
+			if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
+				return nil
+			}
+			choice := evt.Delta.Choices[0]
+			role := ""
+			if !roleSent {
+				role = "assistant"
+				roleSent = true
+			}
+			text := choice.Delta.Content
+			text, inThinking = wrapThinking(text, choice.Delta.Phase, inThinking)
+			if choice.FinishReason != nil {
+				upstreamFinish = *choice.FinishReason
+			}
+			if text == "" && role == "" && choice.FinishReason == nil {
+				return nil
+			}
+			chunk := openai.StreamChunk{
+				ID:      id,
+				Object:  "chat.completion.chunk",
+				Created: created,
+				Model:   model,
+				Choices: []openai.StreamChoice{{
+					Index:        0,
+					Delta:        openai.Delta{Role: role, Content: text},
+					FinishReason: choice.FinishReason,
+				}},
+			}
+			emit(chunk)
+			return nil
+		},
+		func() { writeSSEKeepAlive(w, flusher) },
+	)
+	if loopErr != nil && !errors.Is(loopErr, context.Canceled) {
+		h.deps.Logger.Warn("stream read error", "err", loopErr)
+		upstreamFinish = "length"
+	}
+	if errors.Is(loopErr, context.Canceled) {
+		// Client disconnected — bail without writing more.
+		return
 	}
 
 	if inThinking {
@@ -742,10 +762,10 @@ func (h *handlers) proxyStreamDirect(w http.ResponseWriter, body io.Reader, id s
 		})
 	}
 
-	stop := "stop"
+	finish := upstreamFinish
 	emit(openai.StreamChunk{
 		ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
-		Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &stop}},
+		Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &finish}},
 	})
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	flush()
@@ -754,7 +774,7 @@ func (h *handlers) proxyStreamDirect(w http.ResponseWriter, body io.Reader, id s
 // proxyStreamWithToolDetection buffers the stream to detect <tool_call> blocks.
 // Content before the first <tool_call> is streamed normally. Once detected,
 // the remainder is buffered and tool calls are emitted as structured deltas.
-func (h *handlers) proxyStreamWithToolDetection(w http.ResponseWriter, body io.Reader, id string, created int64, model string) {
+func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string) {
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -786,31 +806,31 @@ func (h *handlers) proxyStreamWithToolDetection(w http.ResponseWriter, body io.R
 		flush()
 	}
 
-	for {
-		evt, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			h.deps.Logger.Warn("stream read error", "err", err)
-			break
-		}
-		if evt.Done {
-			break
-		}
-		if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
-			continue
-		}
-		choice := evt.Delta.Choices[0]
-		text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
-		inThinking = next
-		fullContent.WriteString(text)
+	pacer := newStreamPacer(reader, defaultStreamKeepAlive)
+	loopErr := pacer.loop(ctx,
+		func(evt qwen.StreamEvent) error {
+			if evt.Done {
+				return nil
+			}
+			if evt.Comment != "" {
+				writeSSEKeepAlive(w, flusher)
+				return nil
+			}
+			if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
+				return nil
+			}
+			choice := evt.Delta.Choices[0]
+			text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
+			inThinking = next
+			fullContent.WriteString(text)
 
-		if !triggered {
+			if triggered {
+				return nil
+			}
 			accumulated := fullContent.String()
 			if strings.Contains(accumulated, "<tool_call") {
 				triggered = true
-				continue
+				return nil
 			}
 			// Stream content that is safe (far enough from a potential tag start)
 			safe := len(accumulated) - len("<tool_call")
@@ -834,7 +854,17 @@ func (h *handlers) proxyStreamWithToolDetection(w http.ResponseWriter, body io.R
 				})
 				emittedLen = safe
 			}
-		}
+			return nil
+		},
+		func() { writeSSEKeepAlive(w, flusher) },
+	)
+	truncated := false
+	if loopErr != nil && !errors.Is(loopErr, context.Canceled) {
+		h.deps.Logger.Warn("stream read error", "err", loopErr)
+		truncated = true
+	}
+	if errors.Is(loopErr, context.Canceled) {
+		return
 	}
 
 	if inThinking {
@@ -917,10 +947,15 @@ func (h *handlers) proxyStreamWithToolDetection(w http.ResponseWriter, body io.R
 			}
 		}
 
-		stop := "stop"
+		finish := "stop"
+		if truncated {
+			// Upstream stream errored mid-response; signal truncation
+			// rather than pretending the model finished cleanly.
+			finish = "length"
+		}
 		emit(openai.StreamChunk{
 			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
-			Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &stop}},
+			Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &finish}},
 		})
 	}
 

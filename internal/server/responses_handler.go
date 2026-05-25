@@ -1,7 +1,9 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -242,7 +244,7 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 
 	if req.Stream {
 		defer func() { _ = body.Close() }()
-		h.proxyResponsesStream(w, body, responseID, createdAt, req.Model, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
+		h.proxyResponsesStream(r.Context(), w, body, responseID, createdAt, req.Model, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 		h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
 		return
@@ -447,7 +449,7 @@ func (h *handlers) collectResponsesCompletion(body io.ReadCloser, id string, cre
 }
 
 // proxyResponsesStream emits SSE events in the Responses API streaming format.
-func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools, multiFormat bool) {
+func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools, multiFormat bool) {
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -579,64 +581,74 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 		})
 	}
 
-	for {
-		evt, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			h.deps.Logger.Warn("responses stream read error", "err", err)
-			break
-		}
-		if evt.Done {
-			break
-		}
-		if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
-			continue
-		}
-		choice := evt.Delta.Choices[0]
-		text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
-		inThinking = next
-		if text == "" {
-			continue
-		}
-		fullContent.WriteString(text)
+	pacer := newStreamPacer(reader, defaultStreamKeepAlive)
+	loopErr := pacer.loop(ctx,
+		func(evt qwen.StreamEvent) error {
+			if evt.Done {
+				return nil
+			}
+			if evt.Comment != "" {
+				writeSSEKeepAlive(w, flusher)
+				return nil
+			}
+			if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
+				return nil
+			}
+			choice := evt.Delta.Choices[0]
+			text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
+			inThinking = next
+			if text == "" {
+				return nil
+			}
+			fullContent.WriteString(text)
 
-		if !hasTools {
-			// No tool support: stream every byte as soon as it arrives.
-			emitTextDelta(text)
-			emittedLen = fullContent.Len()
-			continue
-		}
+			if !hasTools {
+				// No tool support: stream every byte as soon as it arrives.
+				emitTextDelta(text)
+				emittedLen = fullContent.Len()
+				return nil
+			}
 
-		if triggered {
-			// Already inside / past a suspected tool call. Buffer everything
-			// and decide at the end of the stream.
-			continue
-		}
+			if triggered {
+				// Already inside / past a suspected tool call. Buffer everything
+				// and decide at the end of the stream.
+				return nil
+			}
 
-		accumulated := fullContent.String()
-		if strings.Contains(accumulated, "<tool_call") ||
-			(multiFormat && strings.Contains(accumulated, "<function_calls")) {
-			triggered = true
-			continue
-		}
+			accumulated := fullContent.String()
+			if strings.Contains(accumulated, "<tool_call") ||
+				(multiFormat && strings.Contains(accumulated, "<function_calls")) {
+				triggered = true
+				return nil
+			}
 
-		// Hold back the longest possible tag prefix so we don't leak a
-		// partial "<tool_ca" to the client. Align to the start of a rune so
-		// we never split UTF-8 sequences mid-codepoint.
-		safe := len(accumulated) - holdback
-		if safe <= emittedLen {
-			continue
-		}
-		for safe > emittedLen && !utf8.RuneStart(accumulated[safe]) {
-			safe--
-		}
-		if safe > emittedLen {
-			emitTextDelta(accumulated[emittedLen:safe])
-			emittedLen = safe
-		}
+			// Hold back the longest possible tag prefix so we don't leak a
+			// partial "<tool_ca" to the client. Align to the start of a rune so
+			// we never split UTF-8 sequences mid-codepoint.
+			safe := len(accumulated) - holdback
+			if safe <= emittedLen {
+				return nil
+			}
+			for safe > emittedLen && !utf8.RuneStart(accumulated[safe]) {
+				safe--
+			}
+			if safe > emittedLen {
+				emitTextDelta(accumulated[emittedLen:safe])
+				emittedLen = safe
+			}
+			return nil
+		},
+		func() { writeSSEKeepAlive(w, flusher) },
+	)
+	truncated := false
+	if loopErr != nil && !errors.Is(loopErr, context.Canceled) {
+		h.deps.Logger.Warn("responses stream read error", "err", loopErr)
+		truncated = true
 	}
+	if errors.Is(loopErr, context.Canceled) {
+		return
+	}
+
 
 	if inThinking {
 		fullContent.WriteString("</think>")
@@ -761,13 +773,20 @@ func (h *handlers) proxyResponsesStream(w http.ResponseWriter, body io.Reader, i
 		})
 	}
 
+	finalStatus := "completed"
+	if truncated {
+		// Upstream stream cut mid-response — tell the client so it
+		// can choose to retry or surface a clearer error instead of
+		// treating partial output as a clean completion.
+		finalStatus = "incomplete"
+	}
 	emitEvent("response.completed", openai.ResponseStreamEvent{
 		Type: "response.completed",
 		Response: &openai.ResponseObject{
 			ID:        id,
 			Object:    "response",
 			CreatedAt: created,
-			Status:    "completed",
+			Status:    finalStatus,
 			Model:     model,
 			Output:    finalOutput,
 		},

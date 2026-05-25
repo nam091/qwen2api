@@ -13,6 +13,10 @@ type StreamEvent struct {
 	Delta *StreamDelta
 	Raw   string
 	Done  bool
+	// Comment is set when the upstream emitted an SSE comment line
+	// (e.g. `: keepalive`). Forwarding these through preserves the
+	// upstream's natural pacing so proxies don't time out idle conns.
+	Comment string
 }
 
 // ReadStream parses one upstream SSE event per call. Returns io.EOF when the
@@ -22,9 +26,12 @@ type StreamReader struct {
 }
 
 // NewStreamReader wraps r as an SSE parser sized for long responses.
+// The buffer ceiling is intentionally large (32 MiB) so a single fat
+// SSE event — e.g. a model emitting tens of KB of code in one chunk —
+// can't trigger bufio.ErrTooLong and abruptly kill the stream.
 func NewStreamReader(r io.Reader) *StreamReader {
 	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 64*1024), 4*1024*1024)
+	scanner.Buffer(make([]byte, 0, 64*1024), 32*1024*1024)
 	return &StreamReader{s: scanner}
 }
 
@@ -37,8 +44,9 @@ func (r *StreamReader) Next() (StreamEvent, error) {
 			continue
 		}
 		if strings.HasPrefix(line, ":") {
-			// SSE comment / keep-alive
-			continue
+			// SSE comment / keep-alive — surface it so the caller can
+			// forward an idle-signal to the downstream client.
+			return StreamEvent{Comment: strings.TrimSpace(line[1:]), Raw: line}, nil
 		}
 		if !strings.HasPrefix(line, "data:") {
 			continue

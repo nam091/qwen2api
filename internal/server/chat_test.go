@@ -734,3 +734,233 @@ func TestConversationContinuityKeys(t *testing.T) {
 		t.Errorf("expected empty key for [user, user] tail, got %q", got)
 	}
 }
+
+// fakeUpstreamSlowStream mimics a model that emits a chunk, then stalls
+// for `idle` (no data) before emitting the rest. This exercises the
+// streamPacer keep-alive path.
+func fakeUpstreamSlowStream(t *testing.T, idle time.Duration) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/chats/new", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"id":"chat-slow"}}`))
+	})
+	mux.HandleFunc("/api/v2/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl, _ := w.(http.Flusher)
+		writeData := func(s string) {
+			fmt.Fprintf(w, "data: %s\n\n", s)
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		writeData(`{"choices":[{"delta":{"role":"assistant","content":"start ","phase":"answer"}}]}`)
+		time.Sleep(idle)
+		writeData(`{"choices":[{"delta":{"content":"end.","phase":"answer"}}]}`)
+		writeData(`[DONE]`)
+	})
+	return httptest.NewServer(mux)
+}
+
+// TestChatStreamEmitsKeepAlive verifies that during a long stall in the
+// upstream stream the gateway proactively writes `: keepalive` SSE comments
+// so reverse proxies / clients don't tear the idle connection down. Without
+// the pacer wired in, this test would see exactly two real data frames and
+// no comments — which is the bug we are fixing.
+func TestChatStreamEmitsKeepAlive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("uses real-time sleeps")
+	}
+	idle := defaultStreamKeepAlive*2 + 500*time.Millisecond
+	upstream := fakeUpstreamSlowStream(t, idle)
+	defer upstream.Close()
+	h := newTestServer(t, upstream)
+
+	body := `{"model":"qwen3-max","stream":true,"messages":[{"role":"user","content":"go"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer sk-test")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	out := rec.Body.String()
+	if !strings.Contains(out, ": keepalive") {
+		t.Fatalf("expected at least one keepalive comment; got: %s", out)
+	}
+	if !strings.Contains(out, "start ") || !strings.Contains(out, "end.") {
+		t.Errorf("expected both real chunks to survive; got: %s", out)
+	}
+	if !strings.Contains(out, "[DONE]") {
+		t.Errorf("expected [DONE] terminator; got: %s", out)
+	}
+}
+
+// fakeUpstreamCutsMidStream emits some content then closes the connection
+// without [DONE], which simulates the upstream timing out / dropping a long
+// response halfway through.
+func fakeUpstreamCutsMidStream(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/chats/new", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"id":"chat-cut"}}`))
+	})
+	mux.HandleFunc("/api/v2/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl, _ := w.(http.Flusher)
+		writeData := func(s string) {
+			fmt.Fprintf(w, "data: %s\n\n", s)
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		writeData(`{"choices":[{"delta":{"role":"assistant","content":"partial output...","phase":"answer"}}]}`)
+		// Force an abrupt connection close by hijacking and shutting down.
+		hj, ok := w.(http.Hijacker)
+		if !ok {
+			return
+		}
+		conn, _, err := hj.Hijack()
+		if err != nil {
+			return
+		}
+		_ = conn.Close()
+	})
+	return httptest.NewServer(mux)
+}
+
+// TestChatStreamReportsTruncationOnUpstreamCut verifies that when the
+// upstream cuts the stream mid-response (no [DONE], connection drop), the
+// gateway emits finish_reason="length" rather than the misleading "stop".
+// Clients reading "stop" interpret partial output as a complete answer and
+// the user sees an apparent silent cutoff.
+func TestChatStreamReportsTruncationOnUpstreamCut(t *testing.T) {
+	upstream := fakeUpstreamCutsMidStream(t)
+	defer upstream.Close()
+	h := newTestServer(t, upstream)
+
+	// Use tools=true to exercise proxyStreamWithToolDetection (which is
+	// what codex / claude-code hit). With no tools the direct path is
+	// also tested implicitly via the other tests in this file.
+	body := `{
+		"model":"qwen3-max","stream":true,
+		"messages":[{"role":"user","content":"go"}],
+		"tools":[{"type":"function","function":{"name":"shell","parameters":{"type":"object"}}}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer sk-test")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	out := rec.Body.String()
+	if !strings.Contains(out, `"finish_reason":"length"`) {
+		t.Errorf("expected finish_reason=length on upstream cut; got: %s", out)
+	}
+	if strings.Contains(out, `"finish_reason":"stop"`) {
+		t.Errorf("expected NO finish_reason=stop on upstream cut; got: %s", out)
+	}
+	// The partial content may arrive across multiple deltas; concatenate
+	// them and assert the original prefix survives end-to-end.
+	var sb strings.Builder
+	for _, line := range strings.Split(out, "\n") {
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		payload := strings.TrimPrefix(line, "data: ")
+		if payload == "[DONE]" {
+			continue
+		}
+		var ev struct {
+			Choices []struct {
+				Delta struct {
+					Content string `json:"content"`
+				} `json:"delta"`
+			} `json:"choices"`
+		}
+		if err := json.Unmarshal([]byte(payload), &ev); err != nil {
+			continue
+		}
+		for _, c := range ev.Choices {
+			sb.WriteString(c.Delta.Content)
+		}
+	}
+	if !strings.Contains(sb.String(), "partial output") {
+		t.Errorf("expected partial content to survive (concatenated); got: %q", sb.String())
+	}
+}
+
+// TestResponsesStreamReportsTruncationOnUpstreamCut covers the same
+// truncation-detection guarantee for the /v1/responses (codex) handler.
+// On mid-stream cut, response.completed should carry status=incomplete
+// rather than status=completed.
+func TestResponsesStreamReportsTruncationOnUpstreamCut(t *testing.T) {
+	upstream := fakeUpstreamCutsMidStream(t)
+	defer upstream.Close()
+	h := newTestServer(t, upstream)
+
+	body := `{
+		"model":"qwen3-max","stream":true,
+		"input":[{"type":"message","role":"user","content":[{"type":"input_text","text":"go"}]}],
+		"tools":[{"type":"function","name":"shell","parameters":{"type":"object"}}]
+	}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/responses", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer sk-test")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	out := rec.Body.String()
+	if !strings.Contains(out, `"status":"incomplete"`) {
+		t.Errorf("expected response.completed with status=incomplete on upstream cut; got: %s", out)
+	}
+}
+
+// fakeUpstreamForwardsKeepalives sends `:keepalive` SSE comments between
+// real frames to simulate upstream qwen.ai's own idle pings.
+func fakeUpstreamForwardsKeepalives(t *testing.T) *httptest.Server {
+	t.Helper()
+	mux := http.NewServeMux()
+	mux.HandleFunc("/api/v2/chats/new", func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":{"id":"chat-ka"}}`))
+	})
+	mux.HandleFunc("/api/v2/chat/completions", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		fl, _ := w.(http.Flusher)
+		write := func(s string) {
+			fmt.Fprint(w, s)
+			if fl != nil {
+				fl.Flush()
+			}
+		}
+		write("data: " + `{"choices":[{"delta":{"role":"assistant","content":"a","phase":"answer"}}]}` + "\n\n")
+		write(": keepalive 1\n\n")
+		write(": keepalive 2\n\n")
+		write("data: " + `{"choices":[{"delta":{"content":"b","phase":"answer"}}]}` + "\n\n")
+		write("data: [DONE]\n\n")
+	})
+	return httptest.NewServer(mux)
+}
+
+// TestChatStreamForwardsUpstreamKeepalives makes sure that when the
+// upstream emits SSE comments (qwen.ai's `:keepalive`), the gateway
+// reflects them as keepalives to the client instead of silently dropping
+// them — preserving the upstream's idle-signal pacing.
+func TestChatStreamForwardsUpstreamKeepalives(t *testing.T) {
+	upstream := fakeUpstreamForwardsKeepalives(t)
+	defer upstream.Close()
+	h := newTestServer(t, upstream)
+
+	body := `{"model":"qwen3-max","stream":true,"messages":[{"role":"user","content":"go"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(body))
+	req.Header.Set("Authorization", "Bearer sk-test")
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	out := rec.Body.String()
+	if !strings.Contains(out, ": keepalive") {
+		t.Errorf("expected gateway to forward keepalive comments; got: %s", out)
+	}
+	if !strings.Contains(out, `"content":"a"`) || !strings.Contains(out, `"content":"b"`) {
+		t.Errorf("expected both data frames to survive; got: %s", out)
+	}
+}
