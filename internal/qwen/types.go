@@ -64,6 +64,8 @@ type CompletionRequest struct {
 	SessionID         string    `json:"session_id"`
 	ID                string    `json:"id"`
 	ChatID            string    `json:"chat_id,omitempty"`
+	// Size is the image ratio for t2i requests (e.g. "1:1", "16:9").
+	Size string `json:"size,omitempty"`
 }
 
 // NewChatRequest is the payload for /api/v2/chats/new.

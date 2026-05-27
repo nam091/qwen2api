@@ -290,3 +290,24 @@ type ErrorBody struct {
 	Type    string `json:"type"`
 	Code    string `json:"code,omitempty"`
 }
+
+// ImageGenerationRequest is the OpenAI /v1/images/generations request body.
+type ImageGenerationRequest struct {
+	Model          string `json:"model"`
+	Prompt         string `json:"prompt"`
+	N              int    `json:"n"`
+	Size           string `json:"size"`
+	ResponseFormat string `json:"response_format"` // "url" (default) or "b64_json"
+}
+
+// ImageGenerationResponse is the OpenAI /v1/images/generations response body.
+type ImageGenerationResponse struct {
+	Created int                    `json:"created"`
+	Data    []ImageGenerationDatum `json:"data"`
+}
+
+// ImageGenerationDatum is one image in the generation response.
+type ImageGenerationDatum struct {
+	URL     string `json:"url,omitempty"`
+	B64JSON string `json:"b64_json,omitempty"`
+}

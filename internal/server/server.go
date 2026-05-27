@@ -83,6 +83,8 @@ func New(deps Deps) http.Handler {
 		r.Get("/models", h.listModels)
 		r.Post("/v1/chat/completions", h.chatCompletions)
 		r.Post("/chat/completions", h.chatCompletions)
+		r.Post("/v1/images/generations", h.imageGenerations)
+		r.Post("/images/generations", h.imageGenerations)
 		r.Post("/v1/embeddings", h.embeddings)
 		r.Post("/embeddings", h.embeddings)
 		// OpenAI Responses API
