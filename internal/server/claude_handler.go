@@ -329,20 +329,61 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 	// Track state.
 	reader := qwen.NewStreamReader(body)
 	inThinking := false
+	thinkingStarted := false
 	textStarted := false
+	textBlockIdx := 0 // index of the text block (shifts if thinking comes first)
 	var fullContent strings.Builder
+	var fullThinking strings.Builder
 	var emittedLen int
 	triggered := false // true once we suspect a <tool_call> tag and buffer
 	var inputTokens, outputTokens int
+
+	startThinkingBlock := func() {
+		if thinkingStarted {
+			return
+		}
+		thinkingStarted = true
+		emit("content_block_start", claude.StreamEvent{
+			Type:         "content_block_start",
+			Index:        intPtrLocal(0),
+			ContentBlock: &claude.ContentPart{Type: "thinking", Thinking: ""},
+		})
+	}
+
+	emitThinkingDelta := func(s string) {
+		if s == "" {
+			return
+		}
+		startThinkingBlock()
+		emit("content_block_delta", claude.StreamEvent{
+			Type:  "content_block_delta",
+			Index: intPtrLocal(0),
+			Delta: &claude.ContentDelta{Type: "thinking_delta", Thinking: s},
+		})
+	}
+
+	stopThinkingBlock := func() {
+		if !thinkingStarted {
+			return
+		}
+		emit("content_block_stop", claude.StreamEvent{
+			Type:  "content_block_stop",
+			Index: intPtrLocal(0),
+		})
+		thinkingStarted = false
+		textBlockIdx = 1 // text block comes after thinking block
+	}
 
 	startTextBlock := func() {
 		if textStarted {
 			return
 		}
 		textStarted = true
+		// Close thinking block first if still open
+		stopThinkingBlock()
 		emit("content_block_start", claude.StreamEvent{
 			Type:         "content_block_start",
-			Index:        intPtrLocal(0),
+			Index:        intPtrLocal(textBlockIdx),
 			ContentBlock: &claude.ContentPart{Type: "text", Text: ""},
 		})
 	}
@@ -354,7 +395,7 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 		startTextBlock()
 		emit("content_block_delta", claude.StreamEvent{
 			Type:  "content_block_delta",
-			Index: intPtrLocal(0),
+			Index: intPtrLocal(textBlockIdx),
 			Delta: &claude.ContentDelta{Type: "text_delta", Text: s},
 		})
 	}
@@ -383,8 +424,25 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 				return nil
 			}
 			choice := evt.Delta.Choices[0]
-			text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
-			inThinking = next
+			phase := choice.Delta.Phase
+			rawContent := choice.Delta.Content
+
+			// Handle thinking phase separately — emit as thinking content block
+			if phase == "think" {
+				if !inThinking {
+					inThinking = true
+				}
+				fullThinking.WriteString(rawContent)
+				emitThinkingDelta(rawContent)
+				return nil
+			}
+			// If we were in thinking and phase changed to answer/default, close thinking block
+			if inThinking && (phase == "answer" || phase == "") {
+				stopThinkingBlock()
+				inThinking = false
+			}
+
+			text := rawContent
 			if text != "" {
 				fullContent.WriteString(text)
 			}
@@ -436,9 +494,10 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 		return
 	}
 
-	// If we ended while still in a thinking phase, close the tag.
-	if inThinking {
-		fullContent.WriteString("</think>")
+	// If we ended while still in a thinking phase, close the block.
+	if inThinking || thinkingStarted {
+		stopThinkingBlock()
+		inThinking = false
 	}
 
 	accumulated := fullContent.String()
@@ -464,28 +523,31 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 					if unsent != "" {
 						emit("content_block_delta", claude.StreamEvent{
 							Type:  "content_block_delta",
-							Index: intPtrLocal(0),
+							Index: intPtrLocal(textBlockIdx),
 							Delta: &claude.ContentDelta{Type: "text_delta", Text: unsent},
 						})
 					}
 				}
 				emit("content_block_stop", claude.StreamEvent{
 					Type:  "content_block_stop",
-					Index: intPtrLocal(0),
+					Index: intPtrLocal(textBlockIdx),
 				})
 				textStarted = false // already closed
 			} else if textStarted {
 				emit("content_block_stop", claude.StreamEvent{
 					Type:  "content_block_stop",
-					Index: intPtrLocal(0),
+					Index: intPtrLocal(textBlockIdx),
 				})
 				textStarted = false
 			}
 
 			// Emit each tool_use as its own block.
-			toolStartIdx := 0
+			toolStartIdx := textBlockIdx + 1
+			if cleanText == "" && !thinkingStarted {
+				toolStartIdx = textBlockIdx
+			}
 			if cleanText != "" {
-				toolStartIdx = 1
+				toolStartIdx = textBlockIdx + 1
 			}
 			for i, tc := range result.ToolCalls {
 				idx := toolStartIdx + i
@@ -522,7 +584,7 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 			if textStarted {
 				emit("content_block_stop", claude.StreamEvent{
 					Type:  "content_block_stop",
-					Index: intPtrLocal(0),
+					Index: intPtrLocal(textBlockIdx),
 				})
 				textStarted = false
 			}
@@ -531,7 +593,7 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 		if textStarted {
 			emit("content_block_stop", claude.StreamEvent{
 				Type:  "content_block_stop",
-				Index: intPtrLocal(0),
+				Index: intPtrLocal(textBlockIdx),
 			})
 			textStarted = false
 		}
@@ -551,6 +613,7 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool) {
 	reader := qwen.NewStreamReader(body)
 	var content strings.Builder
+	var thinkingContent strings.Builder
 	inThinking := false
 	finishReason := ""
 	var inputTokens, outputTokens int
@@ -582,18 +645,29 @@ func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCl
 			continue
 		}
 		choice := evt.Delta.Choices[0]
-		text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
-		inThinking = next
-		content.WriteString(text)
+		phase := choice.Delta.Phase
+		rawContent := choice.Delta.Content
+
+		// Handle thinking phase separately
+		if phase == "think" {
+			if !inThinking {
+				inThinking = true
+			}
+			thinkingContent.WriteString(rawContent)
+			continue
+		}
+		if inThinking && (phase == "answer" || phase == "") {
+			inThinking = false
+		}
+
+		content.WriteString(rawContent)
 		if choice.FinishReason != nil {
 			finishReason = *choice.FinishReason
 		}
 	}
-	if inThinking {
-		content.WriteString("</think>")
-	}
 
 	full := content.String()
+	fullThinking := thinkingContent.String()
 	stopReason := "end_turn"
 	switch finishReason {
 	case "length":
@@ -603,6 +677,11 @@ func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCl
 	}
 
 	var blocks []claude.ContentPart
+	// Add thinking block first if present
+	if fullThinking != "" {
+		blocks = append(blocks, claude.ContentPart{Type: "thinking", Thinking: fullThinking})
+	}
+
 	if hasTools {
 		result := toolcall.ParseWithFormats(full, multiFormat)
 		if len(result.ToolCalls) > 0 {
@@ -624,9 +703,9 @@ func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCl
 			}
 		}
 	}
-	if len(blocks) == 0 {
+	if len(blocks) == 0 || (len(blocks) == 1 && blocks[0].Type == "thinking") {
 		// Always include at least one text block so Claude clients don't choke.
-		blocks = []claude.ContentPart{{Type: "text", Text: full}}
+		blocks = append(blocks, claude.ContentPart{Type: "text", Text: full})
 	}
 
 	if outputTokens == 0 {

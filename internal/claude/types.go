@@ -120,12 +120,15 @@ func (trc *ToolResultContent) UnmarshalJSON(data []byte) error {
 	return fmt.Errorf("tool_result content must be a string or an array of content blocks")
 }
 
-// ContentPart can be text, image, or tool_use/tool_result.
+// ContentPart can be text, image, thinking, or tool_use/tool_result.
 type ContentPart struct {
 	Type string `json:"type"`
 
 	// For type="text"
 	Text string `json:"-"` // custom marshal below
+
+	// For type="thinking"
+	Thinking string `json:"thinking,omitempty"`
 
 	// For type="image"
 	Source *ImageSource `json:"source,omitempty"`
@@ -141,14 +144,21 @@ type ContentPart struct {
 	IsError   bool              `json:"is_error,omitempty"`
 }
 
-// MarshalJSON ensures "text" field is always present for text-type content blocks.
+// MarshalJSON ensures "text" field is always present for text-type content blocks
+// and "thinking" field for thinking-type blocks.
 func (cp ContentPart) MarshalJSON() ([]byte, error) {
 	type Alias ContentPart
-	if cp.Type == "text" {
+	switch cp.Type {
+	case "text":
 		return json.Marshal(struct {
 			Alias
 			Text string `json:"text"`
 		}{Alias: Alias(cp), Text: cp.Text})
+	case "thinking":
+		return json.Marshal(struct {
+			Alias
+			Thinking string `json:"thinking"`
+		}{Alias: Alias(cp), Thinking: cp.Thinking})
 	}
 	return json.Marshal(struct {
 		Alias
@@ -287,6 +297,7 @@ func intPtr(i int) *int { return &i }
 type ContentDelta struct {
 	Type         string          `json:"type"`
 	Text         string          `json:"text,omitempty"`
+	Thinking     string          `json:"thinking,omitempty"`
 	PartialJSON  string          `json:"partial_json,omitempty"`
 	Input        json.RawMessage `json:"input,omitempty"`
 	StopReason   string          `json:"stop_reason,omitempty"`
