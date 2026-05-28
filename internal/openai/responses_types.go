@@ -58,13 +58,14 @@ type ResponseObject struct {
 	Error *ErrorBody `json:"error,omitempty"`
 }
 
-// ResponseOutputItem can be a message or function_call.
+// ResponseOutputItem can be a message, reasoning, or function_call.
 type ResponseOutputItem struct {
-	Type      string                 `json:"type"` // "message", "function_call"
+	Type      string                 `json:"type"` // "message", "reasoning", "function_call"
 	ID        string                 `json:"id,omitempty"`
 	Status    string                 `json:"status,omitempty"`
 	Role      string                 `json:"role,omitempty"`
 	Content   []ResponseContentBlock `json:"content,omitempty"`
+	Summary   []ResponseContentBlock `json:"summary,omitempty"`
 	CallID    string                 `json:"call_id,omitempty"`
 	Name      string                 `json:"name,omitempty"`
 	Arguments string                 `json:"arguments,omitempty"`

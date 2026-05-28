@@ -458,6 +458,7 @@ func (h *handlers) collectResponsesCompletion(body io.ReadCloser, id string, cre
 	defer func() { _ = body.Close() }()
 	reader := qwen.NewStreamReader(body)
 	var content strings.Builder
+	var thinkingContent strings.Builder
 	inThinking := false
 
 	for {
@@ -475,18 +476,41 @@ func (h *handlers) collectResponsesCompletion(body io.ReadCloser, id string, cre
 			continue
 		}
 		choice := evt.Delta.Choices[0]
-		text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
-		inThinking = next
-		content.WriteString(text)
-	}
-	if inThinking {
-		content.WriteString("</think>")
+		phase := choice.Delta.Phase
+		rawContent := choice.Delta.Content
+
+		// Separate thinking from content
+		if phase == "think" {
+			if !inThinking {
+				inThinking = true
+			}
+			thinkingContent.WriteString(rawContent)
+			continue
+		}
+		if inThinking && (phase == "answer" || phase == "") {
+			inThinking = false
+		}
+		content.WriteString(rawContent)
 	}
 
 	fullContent := content.String()
+	fullThinking := thinkingContent.String()
 	truncated := hasTools && isTruncatedToolCallContent(fullContent)
 
 	var output []openai.ResponseOutputItem
+
+	// Add reasoning item first if thinking was present
+	if fullThinking != "" {
+		output = append(output, openai.ResponseOutputItem{
+			Type:   "reasoning",
+			ID:     "rs_" + uuid.NewString(),
+			Status: "completed",
+			Summary: []openai.ResponseContentBlock{{
+				Type: "summary_text",
+				Text: fullThinking,
+			}},
+		})
+	}
 
 	if hasTools {
 		result := toolcall.ParseWithFormats(fullContent, h.deps.Config.Features.MultiFormatToolParsing)
@@ -606,7 +630,6 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 	// without active item". We bypass ResponseStreamEvent here so the empty
 	// `content: []` slice survives JSON marshalling instead of being dropped
 	// by `omitempty`.
-	msgID := "msg_" + uuid.NewString()
 	emitRaw := func(eventType string, payload any) {
 		raw, err := json.Marshal(payload)
 		if err != nil {
@@ -615,35 +638,81 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 		fmt.Fprintf(w, "event: %s\ndata: %s\n\n", eventType, raw)
 		flush()
 	}
-	emitRaw("response.output_item.added", map[string]any{
-		"type":            "response.output_item.added",
-		"sequence_number": seq,
-		"output_index":    0,
-		"item": map[string]any{
-			"type":    "message",
-			"id":      msgID,
-			"status":  "in_progress",
-			"role":    "assistant",
-			"content": []any{},
-		},
-	})
-	seq++
-
-	// Emit response.content_part.added
-	emitEvent("response.content_part.added", openai.ResponseStreamEvent{
-		Type:         "response.content_part.added",
-		ItemID:       msgID,
-		OutputIndex:  0,
-		ContentIndex: 0,
-		Part: &openai.ResponseContentBlock{
-			Type: "output_text",
-			Text: "",
-		},
-	})
 
 	reader := qwen.NewStreamReader(body)
 	inThinking := false
+	thinkingStarted := false
+	thinkingDone := false
+	reasoningID := "rs_" + uuid.NewString()
+	var fullThinking strings.Builder
 	var fullContent strings.Builder
+	outputIdx := 0 // tracks current output_index
+	msgID := ""
+
+	// Start a reasoning item if thinking begins
+	startReasoningItem := func() {
+		if thinkingStarted {
+			return
+		}
+		thinkingStarted = true
+		reasoningID = "rs_" + uuid.NewString()
+		emitRaw("response.output_item.added", map[string]any{
+			"type":            "response.output_item.added",
+			"sequence_number": seq,
+			"output_index":    outputIdx,
+			"item": map[string]any{
+				"type":    "reasoning",
+				"id":      reasoningID,
+				"status":  "in_progress",
+				"summary": []any{},
+			},
+		})
+		seq++
+	}
+
+	// Close reasoning item
+	closeReasoningItem := func() {
+		if !thinkingStarted || thinkingDone {
+			return
+		}
+		thinkingDone = true
+		emitRaw("response.output_item.done", map[string]any{
+			"type":            "response.output_item.done",
+			"sequence_number": seq,
+			"output_index":    outputIdx,
+			"item": map[string]any{
+				"type":    "reasoning",
+				"id":      reasoningID,
+				"status":  "completed",
+				"summary": []map[string]any{{"type": "summary_text", "text": fullThinking.String()}},
+			},
+		})
+		seq++
+		outputIdx++
+	}
+
+	// Start message item (after reasoning if present)
+	startMessageItem := func() {
+		if msgID != "" {
+			return
+		}
+		closeReasoningItem()
+		msgID = "msg_" + uuid.NewString()
+		emitRaw("response.output_item.added", map[string]any{
+			"type":            "response.output_item.added",
+			"sequence_number": seq,
+			"output_index":    outputIdx,
+			"item": map[string]any{
+				"type":    "message",
+				"id":      msgID,
+				"status":  "in_progress",
+				"role":    "assistant",
+				"content": []any{},
+			},
+		})
+		seq++
+	}
+
 	contentIdx := 0
 	// When hasTools is true the model may emit <tool_call>...</tool_call>
 	// blocks inline with text. We must NOT forward those blocks to the client
@@ -669,10 +738,11 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 		if s == "" {
 			return
 		}
+		startMessageItem()
 		emitEvent("response.output_text.delta", openai.ResponseStreamEvent{
 			Type:         "response.output_text.delta",
 			ItemID:       msgID,
-			OutputIndex:  0,
+			OutputIndex:  outputIdx,
 			ContentIndex: contentIdx,
 			Delta:        s,
 		})
@@ -692,8 +762,24 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 				return nil
 			}
 			choice := evt.Delta.Choices[0]
-			text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
-			inThinking = next
+			phase := choice.Delta.Phase
+			rawContent := choice.Delta.Content
+
+			// Handle thinking phase — emit as reasoning item
+			if phase == "think" {
+				if !inThinking {
+					inThinking = true
+					startReasoningItem()
+				}
+				fullThinking.WriteString(rawContent)
+				return nil
+			}
+			// Transition from thinking to answer
+			if inThinking && (phase == "answer" || phase == "") {
+				inThinking = false
+			}
+
+			text := rawContent
 			if text == "" {
 				return nil
 			}
@@ -746,9 +832,10 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 		return
 	}
 
-
-	if inThinking {
-		fullContent.WriteString("</think>")
+	// Close reasoning if still open
+	if inThinking || thinkingStarted {
+		closeReasoningItem()
+		inThinking = false
 	}
 
 	accumulated := fullContent.String()
@@ -776,16 +863,17 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 
 	// Close out the message item. We do this even when tool calls follow so
 	// codex / claude-code can register the assistant turn properly.
+	startMessageItem() // ensure message item was started
 	emitEvent("response.output_text.done", openai.ResponseStreamEvent{
 		Type:         "response.output_text.done",
-		OutputIndex:  0,
+		OutputIndex:  outputIdx,
 		ContentIndex: 0,
 		ItemID:       msgID,
 		Text:         textContent,
 	})
 	emitEvent("response.content_part.done", openai.ResponseStreamEvent{
 		Type:         "response.content_part.done",
-		OutputIndex:  0,
+		OutputIndex:  outputIdx,
 		ContentIndex: 0,
 		ItemID:       msgID,
 		Part: &openai.ResponseContentBlock{
@@ -796,7 +884,7 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 	emitRaw("response.output_item.done", map[string]any{
 		"type":            "response.output_item.done",
 		"sequence_number": seq,
-		"output_index":    0,
+		"output_index":    outputIdx,
 		"item": map[string]any{
 			"type":    "message",
 			"id":      msgID,
@@ -806,13 +894,14 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 		},
 	})
 	seq++
+	outputIdx++
 
 	// Emit function_call items after the message.
-	for i, tc := range toolCalls {
+	for _, tc := range toolCalls {
 		fcID := "fc_" + uuid.NewString()
 		emitEvent("response.output_item.added", openai.ResponseStreamEvent{
 			Type:        "response.output_item.added",
-			OutputIndex: i + 1,
+			OutputIndex: outputIdx,
 			Item: &openai.ResponseOutputItem{
 				Type:      "function_call",
 				ID:        fcID,
@@ -824,19 +913,19 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 		})
 		emitEvent("response.function_call_arguments.delta", openai.ResponseStreamEvent{
 			Type:        "response.function_call_arguments.delta",
-			OutputIndex: i + 1,
+			OutputIndex: outputIdx,
 			ItemID:      fcID,
 			Delta:       tc.Function.Arguments,
 		})
 		emitEvent("response.function_call_arguments.done", openai.ResponseStreamEvent{
 			Type:        "response.function_call_arguments.done",
-			OutputIndex: i + 1,
+			OutputIndex: outputIdx,
 			ItemID:      fcID,
 			Arguments:   tc.Function.Arguments,
 		})
 		emitEvent("response.output_item.done", openai.ResponseStreamEvent{
 			Type:        "response.output_item.done",
-			OutputIndex: i + 1,
+			OutputIndex: outputIdx,
 			Item: &openai.ResponseOutputItem{
 				Type:      "function_call",
 				ID:        fcID,
@@ -846,10 +935,24 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 				Arguments: tc.Function.Arguments,
 			},
 		})
+		outputIdx++
 	}
 
 	// Final output array mirrors what was emitted as items.
-	finalOutput := []openai.ResponseOutputItem{{
+	var finalOutput []openai.ResponseOutputItem
+	// Include reasoning item if present
+	if fullThinking.Len() > 0 {
+		finalOutput = append(finalOutput, openai.ResponseOutputItem{
+			Type:   "reasoning",
+			ID:     reasoningID,
+			Status: "completed",
+			Summary: []openai.ResponseContentBlock{{
+				Type: "summary_text",
+				Text: fullThinking.String(),
+			}},
+		})
+	}
+	finalOutput = append(finalOutput, openai.ResponseOutputItem{
 		Type:   "message",
 		ID:     msgID,
 		Status: "completed",
@@ -858,7 +961,7 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 			Type: "output_text",
 			Text: textContent,
 		}},
-	}}
+	})
 	for _, tc := range toolCalls {
 		finalOutput = append(finalOutput, openai.ResponseOutputItem{
 			Type:      "function_call",
