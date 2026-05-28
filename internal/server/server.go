@@ -17,6 +17,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/reqlog"
+	"github.com/keaume34/qwen2api/internal/session"
 	"github.com/keaume34/qwen2api/internal/tokencount"
 	"github.com/keaume34/qwen2api/internal/tokenpool"
 )
@@ -35,6 +36,7 @@ type Deps struct {
 	Affinity      *affinity.Store
 	FileCache     *filecache.Cache
 	TokenCounter  *tokencount.Counter
+	SessionStore  *session.Store
 	TunnelManager interface {
 		Start(port int) (string, error)
 		Stop() error
@@ -54,6 +56,7 @@ func New(deps Deps) http.Handler {
 		deps:          deps,
 		imageUploader: ossupload.NewUploader(deps.Config.BaseURL, deps.Config.UserAgent, deps.Logger),
 		imageCache:    newImageUploadCache(),
+		sessionStore:  deps.SessionStore,
 	}
 	if deps.Metrics != nil {
 		r.Use(h.metricsMiddleware)

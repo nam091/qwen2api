@@ -22,6 +22,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/reqlog"
+	"github.com/keaume34/qwen2api/internal/session"
 	"github.com/keaume34/qwen2api/internal/toolcall"
 	"github.com/keaume34/qwen2api/internal/topicisolation"
 )
@@ -53,8 +54,60 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	// Topic Isolation (Phase 1 features)
 	req.Messages = h.applyTopicIsolation(req.Messages)
 
+	// Auto-compact: if messages exceed context window threshold, compact them
+	if h.deps.Config.Session.ContextWindowTokens > 0 {
+		// Resolve context window per model, fallback to config default
+		contextWindow := session.GetContextWindow(req.Model, h.deps.Config.Session.ContextWindowTokens)
+		compactResult := session.AutoCompact(
+			req.Messages,
+			contextWindow,
+			h.deps.Config.Session.CompactThreshold,
+			h.deps.TokenCounter,
+		)
+		if compactResult.WasCompacted {
+			h.deps.Logger.Info("auto-compact triggered",
+				"model", req.Model,
+				"context_window", contextWindow,
+				"original_tokens", compactResult.OriginalLen,
+				"compact_tokens", compactResult.CompactLen,
+				"messages_before", len(req.Messages),
+				"messages_after", len(compactResult.Compacted),
+			)
+			req.Messages = compactResult.Compacted
+		}
+	}
+
 	req.Model = h.deps.Config.ResolveModel(req.Model)
+
+	// Session persistence: resolve session by context hash
+	var sessionHash string
+	var sess *session.Session
+	if h.deps.Config.Features.SessionPersistence && h.sessionStore != nil {
+		sessionHash = session.HashMessages(req.Messages, req.Model)
+		if sessionHash != "" {
+			sess = h.sessionStore.ResolveByContextHash(sessionHash)
+		}
+	}
+
 	upstreamReq := buildQwenRequestFull(req, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
+
+	// If session has a summary and enough history, prepend it to the collapsed text
+	if sess != nil && sess.Summary != "" && len(req.Messages) > h.deps.Config.Session.RollingHistoryK {
+		if len(upstreamReq.Messages) > 0 {
+			prefix := "[Previous context summary]\n" + sess.Summary + "\n\n"
+			if len(upstreamReq.Messages[0].ContentParts) > 0 {
+				// Prepend to the text part
+				for i := range upstreamReq.Messages[0].ContentParts {
+					if upstreamReq.Messages[0].ContentParts[i].Type == "text" {
+						upstreamReq.Messages[0].ContentParts[i].Text = prefix + upstreamReq.Messages[0].ContentParts[i].Text
+						break
+					}
+				}
+			} else {
+				upstreamReq.Messages[0].Content = prefix + upstreamReq.Messages[0].Content
+			}
+		}
+	}
 
 	// Detect whether any message contains inline `data:` image URIs that need
 	// to be uploaded to Qwen OSS before the upstream request can succeed.
@@ -293,6 +346,11 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 		h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
+		// Store session messages after streaming (we don't have the response text,
+		// but we store the user messages for context tracking)
+		if sess != nil && sessionHash != "" {
+			h.storeSessionAndMaybeSummarize(sessionHash, req.Messages, "", token.Value)
+		}
 		return
 	}
 
@@ -301,6 +359,10 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		h.handleUpstreamFailure(w, token.Value, err, "read completion stream")
 		h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, err)
 		return
+	}
+	// Store session messages after non-streaming response
+	if sess != nil && sessionHash != "" {
+		h.storeSessionAndMaybeSummarize(sessionHash, req.Messages, fullContent, token.Value)
 	}
 	if hasTools && truncated {
 		for attempt := 2; attempt <= continuationAttempts && truncated; attempt++ {
@@ -356,19 +418,21 @@ func (h *handlers) logRequestEndpoint(r *http.Request, req openai.ChatRequest, e
 	if h.deps.ReqLog == nil {
 		return
 	}
+	clientType := DetectClient(r)
 	entry := reqlog.Entry{
-		RequestID: r.Header.Get("X-Request-Id"),
-		APIKey:    reqlog.MaskKey(bearerOrQuery(r)),
-		Endpoint:  endpoint,
-		Path:      r.URL.Path,
-		Model:     req.Model,
-		Token:     reqlog.MaskKey(token),
-		Status:    status,
-		Latency:   latency.Milliseconds(),
-		Stream:    req.Stream,
-		HasTools:  len(req.Tools) > 0,
-		CacheHit:  cacheHit,
-		Retries:   retries,
+		RequestID:  r.Header.Get("X-Request-Id"),
+		APIKey:     reqlog.MaskKey(bearerOrQuery(r)),
+		Endpoint:   endpoint,
+		Path:       r.URL.Path,
+		Model:      req.Model,
+		Token:      reqlog.MaskKey(token),
+		Status:     status,
+		Latency:    latency.Milliseconds(),
+		Stream:     req.Stream,
+		HasTools:   len(req.Tools) > 0,
+		CacheHit:   cacheHit,
+		Retries:    retries,
+		ClientType: string(clientType),
 	}
 	if err != nil {
 		entry.Error = err.Error()
@@ -655,6 +719,49 @@ func buildContinuationRequest(req openai.ChatRequest, partialAssistant string) o
 		Content: jsonStringRaw("Continue from exactly where you stopped. If you were emitting a <tool_call>, output only the completed <tool_call> block(s)."),
 	})
 	return out
+}
+
+// storeSessionAndMaybeSummarize persists session messages and triggers
+// rolling summary generation when the turn count threshold is reached.
+func (h *handlers) storeSessionAndMaybeSummarize(hash string, reqMsgs []openai.ChatMessage, assistantContent string, token string) {
+	if h.sessionStore == nil || !h.deps.Config.Features.SessionPersistence {
+		return
+	}
+	// Build session messages from the request
+	msgs := session.MessagesFromOpenAI(reqMsgs)
+	if assistantContent != "" {
+		msgs = append(msgs, session.Message{Role: "assistant", Content: assistantContent})
+	}
+	h.sessionStore.AppendMessages(hash, msgs)
+
+	// Check if we should generate a rolling summary
+	if !h.deps.Config.Features.RollingSummary {
+		return
+	}
+	everyN := h.deps.Config.Session.SummaryEveryNTurns
+	if everyN <= 0 {
+		everyN = 5
+	}
+	turnCount := h.sessionStore.GetTurnCount(hash)
+	if turnCount > 0 && turnCount%everyN == 0 {
+		summaryModel := h.deps.Config.Session.SummaryModel
+		if summaryModel == "" {
+			summaryModel = "qwen3-plus"
+		}
+		currentSummary := h.sessionStore.GetSummary(hash)
+		go func() {
+			ctx := context.Background()
+			newSummary, err := session.GenerateSummary(ctx, h.deps.Qwen, token, summaryModel, msgs, currentSummary)
+			if err != nil {
+				h.deps.Logger.Warn("rolling summary failed", "hash", hash, "err", err)
+				return
+			}
+			if newSummary != "" {
+				h.sessionStore.SetSummary(hash, newSummary)
+				h.deps.Logger.Info("rolling summary updated", "hash", hash, "len", len(newSummary))
+			}
+		}()
+	}
 }
 
 func isTruncatedToolCallContent(content string) bool {

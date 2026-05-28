@@ -43,6 +43,8 @@ type FeatureToggles struct {
 	TopicIsolation         bool `json:"topic_isolation"`
 	Tunnel                 bool `json:"tunnel"`
 	BrowserEngineFallback  bool `json:"browser_engine_fallback"`
+	SessionPersistence     bool `json:"session_persistence"`
+	RollingSummary         bool `json:"rolling_summary"`
 	// ThinkingMode controls whether upstream thinking is enabled.
 	// Values: "auto" (default — based on model name / client flag),
 	// "on" (force enable), "off" (force disable).
@@ -74,6 +76,32 @@ type TokenRefreshConfig struct {
 	WarnBeforeSeconds    int `json:"warn_before_seconds"`
 }
 
+// SessionConfig configures session persistence and rolling summary.
+type SessionConfig struct {
+	MaxSessions        int    `json:"max_sessions"`
+	MaxHistory         int    `json:"max_history"`
+	RollingHistoryK    int    `json:"rolling_history_k"`
+	SummaryEveryNTurns int    `json:"summary_every_n_turns"`
+	SummaryModel       string `json:"summary_model"`
+	DataDir            string `json:"data_dir"`
+	// ContextWindowTokens is the max token budget for the upstream model.
+	// Default 32768 (Qwen standard). Set to 131072 for Qwen-Long models.
+	ContextWindowTokens int `json:"context_window_tokens"`
+	// CompactThreshold is the fraction (0.0-1.0) of ContextWindowTokens
+	// that triggers auto-compaction. Default 0.8 (80%).
+	CompactThreshold float64 `json:"compact_threshold"`
+}
+
+// ModelConfig holds per-model configuration overrides.
+type ModelConfig struct {
+	Model              string  `json:"model"`
+	TokensPerMinute    int     `json:"tokens_per_minute,omitempty"`
+	TokensPerDay       int     `json:"tokens_per_day,omitempty"`
+	ContextWindow      int     `json:"context_window,omitempty"`
+	CostPerInputToken  float64 `json:"cost_per_input_token,omitempty"`
+	CostPerOutputToken float64 `json:"cost_per_output_token,omitempty"`
+}
+
 // Config holds the resolved runtime configuration.
 type Config struct {
 	Port            int      `json:"port"`
@@ -99,6 +127,10 @@ type Config struct {
 	Retry        RetryConfig        `json:"retry"`
 	Logging      LoggingConfig      `json:"logging"`
 	TokenRefresh TokenRefreshConfig `json:"token_refresh"`
+	Session      SessionConfig      `json:"session"`
+
+	// Model-specific configurations (optional overrides).
+	ModelConfigs []ModelConfig `json:"model_configs,omitempty"`
 }
 
 // Default returns the baseline configuration. Empty slices indicate
@@ -144,6 +176,16 @@ func Default() Config {
 		TokenRefresh: TokenRefreshConfig{
 			CheckIntervalSeconds: 300,
 			WarnBeforeSeconds:    3600,
+		},
+		Session: SessionConfig{
+			MaxSessions:         1000,
+			MaxHistory:          20,
+			RollingHistoryK:     10,
+			SummaryEveryNTurns:  5,
+			SummaryModel:        "",
+			DataDir:             "",
+			ContextWindowTokens: 32768,
+			CompactThreshold:    0.8,
 		},
 		ModelAliases: map[string]string{
 			// qwen3.7-plus: upstream has 3.7-Plus-Preview under internal ID.

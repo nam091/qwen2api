@@ -20,6 +20,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/reqlog"
 	"github.com/keaume34/qwen2api/internal/server"
+	"github.com/keaume34/qwen2api/internal/session"
 	"github.com/keaume34/qwen2api/internal/tokencount"
 	"github.com/keaume34/qwen2api/internal/tokenpool"
 	"github.com/keaume34/qwen2api/internal/tunnel"
@@ -102,6 +103,17 @@ func run() error {
 		tunnelMgr = tunnel.New(logger)
 	}
 
+	var sessionStore *session.Store
+	if cfg.Features.SessionPersistence {
+		sessionStore = session.NewStore(session.StoreConfig{
+			MaxSessions: cfg.Session.MaxSessions,
+			MaxHistory:  cfg.Session.MaxHistory,
+			DataDir:     cfg.Session.DataDir,
+			Logger:      logger,
+		})
+		logger.Info("session persistence enabled", "max_sessions", cfg.Session.MaxSessions, "max_history", cfg.Session.MaxHistory, "data_dir", cfg.Session.DataDir)
+	}
+
 	srv := server.New(server.Deps{
 		Config:        &cfg,
 		Logger:        logger,
@@ -113,6 +125,7 @@ func run() error {
 		Affinity:      affinityStore,
 		FileCache:     fileCache,
 		TokenCounter:  tokenCounter,
+		SessionStore:  sessionStore,
 		TunnelManager: tunnelMgr,
 	})
 

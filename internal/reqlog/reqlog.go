@@ -12,20 +12,21 @@ import (
 
 // Entry is one line in the request log.
 type Entry struct {
-	Time      string `json:"time"`
-	RequestID string `json:"request_id"`
-	APIKey    string `json:"api_key,omitempty"`
-	Endpoint  string `json:"endpoint,omitempty"` // "chat" | "claude" | "responses" | "embeddings"
-	Path      string `json:"path,omitempty"`
-	Model     string `json:"model"`
-	Token     string `json:"token,omitempty"`
-	Status    int    `json:"status"`
-	Latency   int64  `json:"latency_ms"`
-	Stream    bool   `json:"stream"`
-	HasTools  bool   `json:"has_tools"`
-	CacheHit  bool   `json:"cache_hit"`
-	Retries   int    `json:"retries,omitempty"`
-	Error     string `json:"error,omitempty"`
+	Time       string `json:"time"`
+	RequestID  string `json:"request_id"`
+	APIKey     string `json:"api_key,omitempty"`
+	Endpoint   string `json:"endpoint,omitempty"` // "chat" | "claude" | "responses" | "embeddings"
+	Path       string `json:"path,omitempty"`
+	Model      string `json:"model"`
+	Token      string `json:"token,omitempty"`
+	Status     int    `json:"status"`
+	Latency    int64  `json:"latency_ms"`
+	Stream     bool   `json:"stream"`
+	HasTools   bool   `json:"has_tools"`
+	CacheHit   bool   `json:"cache_hit"`
+	Retries    int    `json:"retries,omitempty"`
+	Error      string `json:"error,omitempty"`
+	ClientType string `json:"client_type,omitempty"` // "codex" | "claude-code" | "opencode" | etc
 }
 
 // Logger writes entries to a rotating file.

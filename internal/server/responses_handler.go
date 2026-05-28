@@ -18,6 +18,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/openai"
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
+	"github.com/keaume34/qwen2api/internal/session"
 	"github.com/keaume34/qwen2api/internal/toolcall"
 )
 
@@ -54,6 +55,28 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 	if len(messages) == 0 {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "input must not be empty")
 		return
+	}
+
+	// Auto-compact: if messages exceed context window threshold, compact them
+	if h.deps.Config.Session.ContextWindowTokens > 0 {
+		contextWindow := session.GetContextWindow(req.Model, h.deps.Config.Session.ContextWindowTokens)
+		compactResult := session.AutoCompact(
+			messages,
+			contextWindow,
+			h.deps.Config.Session.CompactThreshold,
+			h.deps.TokenCounter,
+		)
+		if compactResult.WasCompacted {
+			h.deps.Logger.Info("responses: auto-compact triggered",
+				"model", req.Model,
+				"context_window", contextWindow,
+				"original_tokens", compactResult.OriginalLen,
+				"compact_tokens", compactResult.CompactLen,
+				"messages_before", len(messages),
+				"messages_after", len(compactResult.Compacted),
+			)
+			messages = compactResult.Compacted
+		}
 	}
 
 	// Build equivalent ChatRequest

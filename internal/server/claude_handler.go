@@ -18,6 +18,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/openai"
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
+	"github.com/keaume34/qwen2api/internal/session"
 	"github.com/keaume34/qwen2api/internal/toolcall"
 )
 
@@ -56,6 +57,28 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve model alias
 	oaiReq.Model = h.deps.Config.ResolveModel(oaiReq.Model)
+
+	// Auto-compact: if messages exceed context window threshold, compact them
+	if h.deps.Config.Session.ContextWindowTokens > 0 {
+		contextWindow := session.GetContextWindow(oaiReq.Model, h.deps.Config.Session.ContextWindowTokens)
+		compactResult := session.AutoCompact(
+			oaiReq.Messages,
+			contextWindow,
+			h.deps.Config.Session.CompactThreshold,
+			h.deps.TokenCounter,
+		)
+		if compactResult.WasCompacted {
+			h.deps.Logger.Info("claude: auto-compact triggered",
+				"model", oaiReq.Model,
+				"context_window", contextWindow,
+				"original_tokens", compactResult.OriginalLen,
+				"compact_tokens", compactResult.CompactLen,
+				"messages_before", len(oaiReq.Messages),
+				"messages_after", len(compactResult.Compacted),
+			)
+			oaiReq.Messages = compactResult.Compacted
+		}
+	}
 
 	// Build upstream request
 	upstreamReq := buildQwenRequestFull(oaiReq, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
