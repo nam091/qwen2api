@@ -280,11 +280,15 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 	if hasTools && len(oaiReq.Tools) == 0 && len(req.Tools) > 0 {
 		oaiReq.Tools = make([]openai.Tool, len(req.Tools))
 	}
+	// Estimate input tokens from request messages as fallback since Qwen
+	// upstream never sends usage data.
+	inputTokensFallback := estimateInputTokens(oaiReq.Messages)
+
 	msgID := "msg_" + uuid.NewString()
 	if req.Stream {
-		h.streamClaudeResponse(r.Context(), w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
+		h.streamClaudeResponse(r.Context(), w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing, inputTokensFallback)
 	} else {
-		h.aggregateClaudeResponse(w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing)
+		h.aggregateClaudeResponse(w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing, inputTokensFallback)
 	}
 	h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 	h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
@@ -292,7 +296,7 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 
 // streamClaudeResponse reads raw Qwen SSE, applies thinking wrapping and tool
 // detection, and emits a well-formed Claude Messages SSE stream.
-func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool) {
+func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool, inputTokensFallback int) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -503,6 +507,9 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 
 	accumulated := fullContent.String()
 	// Estimate input/output tokens cheaply if upstream didn't supply them.
+	if inputTokens == 0 {
+		inputTokens = inputTokensFallback
+	}
 	if outputTokens == 0 {
 		outputTokens = approxTokens(accumulated)
 	}
@@ -611,7 +618,7 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 
 // aggregateClaudeResponse reads the full Qwen stream and returns a single
 // Claude MessagesResponse JSON envelope.
-func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool) {
+func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool, inputTokensFallback int) {
 	reader := qwen.NewStreamReader(body)
 	var content strings.Builder
 	var thinkingContent strings.Builder
@@ -709,6 +716,9 @@ func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCl
 		blocks = append(blocks, claude.ContentPart{Type: "text", Text: full})
 	}
 
+	if inputTokens == 0 {
+		inputTokens = inputTokensFallback
+	}
 	if outputTokens == 0 {
 		outputTokens = approxTokens(full)
 	}
@@ -742,6 +752,19 @@ func writeClaudeError(w http.ResponseWriter, status int, errType, message string
 // intPtrLocal returns a pointer to i. Local copy to avoid exporting from the
 // claude package.
 func intPtrLocal(i int) *int { return &i }
+
+// estimateInputTokens estimates input token count from request messages.
+// Used as fallback when upstream doesn't report usage (Qwen never does).
+func estimateInputTokens(messages []openai.ChatMessage) int {
+	total := 0
+	for _, m := range messages {
+		total += 4 // per-message overhead
+		total += approxTokens(m.Role)
+		total += approxTokens(m.Text())
+	}
+	total += 2 // conversation overhead
+	return total
+}
 
 // approxTokens estimates token count for a string as a rough 4 chars/token.
 func approxTokens(s string) int {
