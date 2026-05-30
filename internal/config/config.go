@@ -1,4 +1,4 @@
-// Package config loads qwen2api runtime configuration from environment
+﻿// Package config loads qwen2api runtime configuration from environment
 // variables and an optional JSON file. Environment variables take precedence.
 package config
 
@@ -112,6 +112,7 @@ type Config struct {
 	SsxmodItna2     string   `json:"ssxmod_itna2"`
 	UserAgent       string   `json:"user_agent"`
 	TimeoutSeconds  int      `json:"timeout_seconds"`
+	StreamKeepAliveSeconds int `json:"stream_keepalive_seconds"`
 	CooldownSeconds int      `json:"cooldown_seconds"`
 	LogLevel        string   `json:"log_level"`
 
@@ -256,6 +257,14 @@ func Load() (Config, error) {
 		}
 		cfg.TimeoutSeconds = n
 	}
+	if v := os.Getenv("QWEN2API_STREAM_KEEPALIVE_SECONDS"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return cfg, fmt.Errorf("QWEN2API_STREAM_KEEPALIVE_SECONDS: %w", err)
+		}
+		cfg.StreamKeepAliveSeconds = n
+	}
+
 	if v := os.Getenv("QWEN2API_COOLDOWN_SECONDS"); v != "" {
 		n, err := strconv.Atoi(v)
 		if err != nil {

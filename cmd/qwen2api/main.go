@@ -1,4 +1,4 @@
-// Command qwen2api launches the OpenAI-compatible HTTP gateway for chat.qwen.ai.
+﻿// Command qwen2api launches the OpenAI-compatible HTTP gateway for chat.qwen.ai.
 package main
 
 import (
@@ -134,6 +134,8 @@ func run() error {
 		Addr:              addr,
 		Handler:           srv,
 		ReadHeaderTimeout: 15 * time.Second,
+		WriteTimeout:      0,
+		IdleTimeout:       120 * time.Second,
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
