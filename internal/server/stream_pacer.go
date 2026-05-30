@@ -53,7 +53,7 @@ type pacerEvent struct {
 func newStreamPacer(r *qwen.StreamReader, keepAlive time.Duration) *streamPacer {
 	p := &streamPacer{
 		reader:   r,
-		events:   make(chan pacerEvent, 32), // Larger buffer prevents reader goroutine blocking when handler is slow
+		events:   make(chan pacerEvent, 64), // Large buffer prevents reader goroutine blocking under concurrent CLI load
 		keepIntv: keepAlive,
 	}
 	go p.run()
