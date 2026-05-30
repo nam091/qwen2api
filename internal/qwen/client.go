@@ -1,4 +1,4 @@
-package qwen
+﻿package qwen
 
 import (
 	"bytes"
@@ -55,7 +55,7 @@ func NewClient(cfg ClientConfig) *Client {
 	}
 	timeout := time.Duration(cfg.TimeoutSeconds) * time.Second
 	if timeout <= 0 {
-		timeout = 120 * time.Second
+		timeout = 300 * time.Second
 	}
 
 	var transport *http.Transport
@@ -64,26 +64,40 @@ func NewClient(cfg ClientConfig) *Client {
 		if cfg.MaxIdleConns > 0 {
 			base.MaxIdleConns = cfg.MaxIdleConns
 		} else {
-			base.MaxIdleConns = 100
+			base.MaxIdleConns = 200
 		}
 		if cfg.MaxIdleConnsPerHost > 0 {
 			base.MaxIdleConnsPerHost = cfg.MaxIdleConnsPerHost
 		} else {
-			base.MaxIdleConnsPerHost = 32
+			base.MaxIdleConnsPerHost = 64
 		}
 		idle := time.Duration(cfg.IdleConnTimeoutSeconds) * time.Second
 		if idle <= 0 {
 			idle = 90 * time.Second
 		}
 		base.IdleConnTimeout = idle
+		base.ForceAttemptHTTP2 = true
 		transport = base
 	}
 
 	httpClient := &http.Client{Timeout: timeout}
-	streamClient := &http.Client{}
 	if transport != nil {
 		httpClient.Transport = transport
-		streamClient.Transport = transport
+	}
+
+	// Stream client gets its OWN transport to avoid HTTP/2 multiplexing
+	// failures killing all concurrent streams on the same connection.
+	// HTTP/1.1 with keep-alive is more resilient for long-lived SSE streams
+	// because each stream has its own TCP connection.
+	streamTransport := http.DefaultTransport.(*http.Transport).Clone()
+	streamTransport.ForceAttemptHTTP2 = false // Force HTTP/1.1 for streams
+	streamTransport.MaxIdleConnsPerHost = 32
+	streamTransport.IdleConnTimeout = 5 * time.Minute // Longer than upstream keepalive
+	streamTransport.DisableCompression = false
+	streamClient := &http.Client{
+		Transport: streamTransport,
+		// No timeout — streams can run indefinitely. Context cancellation
+		// handles cleanup when the downstream client disconnects.
 	}
 
 	var browser *browserengine.HybridEngine

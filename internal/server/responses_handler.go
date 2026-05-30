@@ -748,7 +748,8 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 		})
 	}
 
-	pacer := newStreamPacer(reader, defaultStreamKeepAlive)
+	keepAlive := EffectiveKeepAlive(h.deps.Config.StreamKeepAliveSeconds)
+	pacer := newStreamPacer(reader, keepAlive)
 	loopErr := pacer.loop(ctx,
 		func(evt qwen.StreamEvent) error {
 			if evt.Done {

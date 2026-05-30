@@ -402,7 +402,8 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 
 	stopReason := "end_turn"
 
-	pacer := newStreamPacer(reader, defaultStreamKeepAlive)
+	keepAlive := EffectiveKeepAlive(h.deps.Config.StreamKeepAliveSeconds)
+	pacer := newStreamPacer(reader, keepAlive)
 	loopErr := pacer.loop(ctx,
 		func(evt qwen.StreamEvent) error {
 			if evt.Done {

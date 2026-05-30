@@ -899,7 +899,8 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 	// clients can detect truncation and decide whether to retry.
 	upstreamFinish := "stop"
 
-	pacer := newStreamPacer(reader, defaultStreamKeepAlive)
+	keepAlive := EffectiveKeepAlive(h.deps.Config.StreamKeepAliveSeconds)
+	pacer := newStreamPacer(reader, keepAlive)
 	loopErr := pacer.loop(ctx,
 		func(evt qwen.StreamEvent) error {
 			if evt.Done {
@@ -1004,7 +1005,8 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 		flush()
 	}
 
-	pacer := newStreamPacer(reader, defaultStreamKeepAlive)
+	keepAlive := EffectiveKeepAlive(h.deps.Config.StreamKeepAliveSeconds)
+	pacer := newStreamPacer(reader, keepAlive)
 	loopErr := pacer.loop(ctx,
 		func(evt qwen.StreamEvent) error {
 			if evt.Done {

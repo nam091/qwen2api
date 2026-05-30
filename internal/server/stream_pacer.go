@@ -1,11 +1,16 @@
-package server
+﻿package server
 
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
+	"net"
 	"net/http"
+	"strings"
+	"syscall"
 	"time"
 
 	"github.com/keaume34/qwen2api/internal/qwen"
@@ -48,7 +53,7 @@ type pacerEvent struct {
 func newStreamPacer(r *qwen.StreamReader, keepAlive time.Duration) *streamPacer {
 	p := &streamPacer{
 		reader:   r,
-		events:   make(chan pacerEvent, 4),
+		events:   make(chan pacerEvent, 32), // Larger buffer prevents reader goroutine blocking when handler is slow
 		keepIntv: keepAlive,
 	}
 	go p.run()
@@ -91,18 +96,30 @@ func (p *streamPacer) loop(
 	for {
 		select {
 		case <-ctx.Done():
+			slog.Debug("stream pacer: context cancelled", "err", ctx.Err())
 			return ctx.Err()
 		case res, ok := <-p.events:
 			if !ok {
+				slog.Debug("stream pacer: event channel closed (upstream EOF)")
 				return nil
 			}
 			if res.Err == io.EOF {
 				return nil
 			}
 			if res.Err != nil {
+				// Classify the error for observability.
+				errStr := res.Err.Error()
+				isTransient := isTransientStreamError(res.Err)
+				slog.Warn("stream pacer: upstream read error",
+					"err", errStr,
+					"transient", isTransient,
+					"since_last_emit", time.Since(lastEmit).Round(time.Millisecond),
+				)
 				return res.Err
 			}
 			if err := onEvent(res.Evt); err != nil {
+				// Client-side write error (disconnect, broken pipe).
+				slog.Debug("stream pacer: client write error", "err", err)
 				return err
 			}
 			lastEmit = time.Now()
@@ -134,8 +151,50 @@ func writeSSEKeepAlive(w http.ResponseWriter, flusher http.Flusher) {
 // defaultStreamKeepAlive is the gap between keepalive comments. Chosen
 // well under common idle-timeouts: codex CLI uses ~60s, Cloudflare
 // quick-tunnel kills idle conns after ~100s, and most reverse proxies
-// (nginx, traefik) default to 60s. 10s leaves ample headroom.
-const defaultStreamKeepAlive = 10 * time.Second
+// (nginx, traefik) default to 60s. 5s leaves ample headroom.
+const defaultStreamKeepAlive = 5 * time.Second
+
+// EffectiveKeepAlive returns the configured keepalive if > 0, otherwise
+// the default. This allows runtime override via QWEN2API_STREAM_KEEPALIVE_SECONDS.
+func EffectiveKeepAlive(configuredSeconds int) time.Duration {
+	if configuredSeconds > 0 {
+		return time.Duration(configuredSeconds) * time.Second
+	}
+	return defaultStreamKeepAlive
+}
+
+// isTransientStreamError returns true if the error is likely a temporary
+// network issue that could succeed on retry (connection reset, timeout,
+// DNS failure, etc.) as opposed to a permanent error (auth failure, 4xx).
+func isTransientStreamError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// Network-level errors are transient.
+	var netErr net.Error
+	if errors.As(err, &netErr) {
+		return true
+	}
+	// Connection reset / broken pipe / ECONNREFUSED.
+	if errors.Is(err, syscall.ECONNRESET) ||
+		errors.Is(err, syscall.EPIPE) ||
+		errors.Is(err, syscall.ECONNREFUSED) ||
+		errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	// String-based fallback for wrapped errors that don't unwrap cleanly.
+	s := strings.ToLower(err.Error())
+	for _, kw := range []string{
+		"connection reset", "broken pipe", "eof",
+		"timeout", "timed out", "dns", "refused",
+		"connection closed", "stream error", "http2:",
+	} {
+		if strings.Contains(s, kw) {
+			return true
+		}
+	}
+	return false
+}
 
 // preflightChatIDReuse handles a subtle but high-impact upstream quirk:
 // chat.qwen.ai returns an EMPTY stream (zero content delta, immediate
