@@ -339,11 +339,15 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+	// Estimate input tokens from request messages and tool definitions.
+	// Qwen upstream never sends usage. System prompt is already in messages (role:"system").
+	inputTokensFallback := estimateInputTokensOpenAI(req.Messages, req.Tools)
+
 	if req.Stream {
 		defer func() {
 			_ = body.Close()
 		}()
-		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools)
+		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools, inputTokensFallback)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 		h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
 		// Store session messages after streaming (we don't have the response text,
@@ -354,7 +358,7 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, fullContent, truncated, err := h.collectChatCompletion(body, completionID, created, req.Model, hasTools)
+	resp, fullContent, truncated, err := h.collectChatCompletion(body, completionID, created, req.Model, hasTools, inputTokensFallback)
 	if err != nil {
 		h.handleUpstreamFailure(w, token.Value, err, "read completion stream")
 		h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, err)
@@ -376,7 +380,7 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, contErr)
 				return
 			}
-			resp, fullContent, truncated, err = h.collectChatCompletion(contBody, completionID, created, req.Model, hasTools)
+			resp, fullContent, truncated, err = h.collectChatCompletion(contBody, completionID, created, req.Model, hasTools, inputTokensFallback)
 			if err != nil {
 				h.handleUpstreamFailure(w, token.Value, err, "read continuation stream")
 				h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, err)
@@ -778,7 +782,7 @@ func isTruncatedToolCallContent(content string) bool {
 	return false
 }
 
-func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created int64, model string, hasTools bool) (openai.ChatCompletion, string, bool, error) {
+func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created int64, model string, hasTools bool, inputTokensFallback int) (openai.ChatCompletion, string, bool, error) {
 	defer func() {
 		_ = body.Close()
 	}()
@@ -814,6 +818,12 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 	}
 
 	fullContent := content.String()
+	outputTokens := approxTokens(fullContent)
+	usage := openai.Usage{
+		PromptTokens:     inputTokensFallback,
+		CompletionTokens: outputTokens,
+		TotalTokens:      inputTokensFallback + outputTokens,
+	}
 	truncated := hasTools && isTruncatedToolCallContent(fullContent)
 	if hasTools {
 		result := toolcall.ParseWithFormats(fullContent, h.deps.Config.Features.MultiFormatToolParsing)
@@ -836,6 +846,7 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 					},
 					FinishReason: "tool_calls",
 				}},
+				Usage: usage,
 			}
 			return resp, fullContent, truncated, nil
 		}
@@ -851,21 +862,22 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 			Message:      openai.ChatMessageOut{Role: "assistant", Content: strPtr(fullContent)},
 			FinishReason: finishReason,
 		}},
+		Usage: usage,
 	}
 	return resp, fullContent, truncated, nil
 }
 
 // proxyStream re-emits upstream events as OpenAI-style SSE chunks.
-func (h *handlers) proxyStream(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool) {
+func (h *handlers) proxyStream(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool, inputTokensFallback int) {
 	if hasTools {
-		h.proxyStreamWithToolDetection(ctx, w, body, id, created, model)
+		h.proxyStreamWithToolDetection(ctx, w, body, id, created, model, inputTokensFallback)
 		return
 	}
-	h.proxyStreamDirect(ctx, w, body, id, created, model)
+	h.proxyStreamDirect(ctx, w, body, id, created, model, inputTokensFallback)
 }
 
 // proxyStreamDirect is the original streaming path with no tool detection.
-func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string) {
+func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, inputTokensFallback int) {
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -876,6 +888,7 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 	reader := qwen.NewStreamReader(body)
 	roleSent := false
 	inThinking := false
+	var outputLen int // track total output bytes for token estimation
 
 	flush := func() {
 		if flusher != nil {
@@ -929,6 +942,7 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 			if text == "" && role == "" && choice.FinishReason == nil {
 				return nil
 			}
+			outputLen += len(text)
 			chunk := openai.StreamChunk{
 				ID:      id,
 				Object:  "chat.completion.chunk",
@@ -955,16 +969,26 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 	}
 
 	if inThinking {
+		outputLen += len("</think>")
 		emit(openai.StreamChunk{
 			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
 			Choices: []openai.StreamChoice{{Delta: openai.Delta{Content: "</think>"}}},
 		})
 	}
 
-	finish := upstreamFinish
+	// Emit usage in final chunk per OpenAI streaming convention.
+	outputTokens := outputLen / 4
+	if outputTokens == 0 && outputLen > 0 {
+		outputTokens = 1
+	}
 	emit(openai.StreamChunk{
 		ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
-		Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &finish}},
+		Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &upstreamFinish}},
+		Usage: &openai.Usage{
+			PromptTokens:     inputTokensFallback,
+			CompletionTokens: outputTokens,
+			TotalTokens:      inputTokensFallback + outputTokens,
+		},
 	})
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	flush()
@@ -973,7 +997,7 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 // proxyStreamWithToolDetection buffers the stream to detect <tool_call> blocks.
 // Content before the first <tool_call> is streamed normally. Once detected,
 // the remainder is buffered and tool calls are emitted as structured deltas.
-func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string) {
+func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, inputTokensFallback int) {
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -1122,10 +1146,17 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			})
 		}
 
+		// Emit usage with tool_calls finish chunk
+		outputTokens := approxTokens(accumulated)
 		toolCalls := "tool_calls"
 		emit(openai.StreamChunk{
 			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
 			Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &toolCalls}},
+			Usage: &openai.Usage{
+				PromptTokens:     inputTokensFallback,
+				CompletionTokens: outputTokens,
+				TotalTokens:      inputTokensFallback + outputTokens,
+			},
 		})
 	} else {
 		// No tool calls found — emit any remaining buffered content
@@ -1153,9 +1184,15 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			// rather than pretending the model finished cleanly.
 			finish = "length"
 		}
+		outputTokens := approxTokens(accumulated)
 		emit(openai.StreamChunk{
 			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
 			Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &finish}},
+			Usage: &openai.Usage{
+				PromptTokens:     inputTokensFallback,
+				CompletionTokens: outputTokens,
+				TotalTokens:      inputTokensFallback + outputTokens,
+			},
 		})
 	}
 

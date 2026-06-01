@@ -281,8 +281,10 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 		oaiReq.Tools = make([]openai.Tool, len(req.Tools))
 	}
 	// Estimate input tokens from request messages as fallback since Qwen
-	// upstream never sends usage data.
-	inputTokensFallback := estimateInputTokens(oaiReq.Messages)
+	// upstream never sends usage data. MUST include system prompt and tool
+	// definitions — Claude Code uses input_tokens to track context window
+	// usage and decide when to compact.
+	inputTokensFallback := estimateInputTokensClaude(oaiReq.Messages, req.System, req.Tools)
 
 	msgID := "msg_" + uuid.NewString()
 	if req.Stream {
@@ -506,12 +508,16 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 	}
 
 	accumulated := fullContent.String()
+	thinkingContent := fullThinking.String()
 	// Estimate input/output tokens cheaply if upstream didn't supply them.
 	if inputTokens == 0 {
 		inputTokens = inputTokensFallback
 	}
 	if outputTokens == 0 {
-		outputTokens = approxTokens(accumulated)
+		// Output tokens MUST include thinking — Claude Code uses this to track
+		// context window usage and decide when to compact. Thinking content is
+		// sent to the client as reasoning blocks and accumulates in transcript.
+		outputTokens = approxTokens(accumulated) + approxTokens(thinkingContent)
 	}
 
 	if hasTools {
@@ -720,7 +726,9 @@ func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCl
 		inputTokens = inputTokensFallback
 	}
 	if outputTokens == 0 {
-		outputTokens = approxTokens(full)
+		// Output tokens MUST include thinking — Claude Code uses this to track
+		// context window usage and decide when to compact.
+		outputTokens = approxTokens(full) + approxTokens(fullThinking)
 	}
 
 	resp := claude.MessagesResponse{
@@ -755,13 +763,58 @@ func intPtrLocal(i int) *int { return &i }
 
 // estimateInputTokens estimates input token count from request messages.
 // Used as fallback when upstream doesn't report usage (Qwen never does).
-func estimateInputTokens(messages []openai.ChatMessage) int {
+// estimateInputTokensClaude estimates the total input token count for Claude API requests.
+// Includes messages, system prompt, and tool definitions. Claude Code uses this to track
+// context window usage and decide when to compact — missing any component causes it
+// to underestimate and delay compaction until it's too late.
+func estimateInputTokensClaude(messages []openai.ChatMessage, system claude.SystemPrompt, tools []claude.Tool) int {
 	total := 0
+
+	// 1. System prompt (~2-5K tokens typically)
+	if system != "" {
+		total += approxTokens(string(system))
+	}
+
+	// 2. Tool definitions (~30-50K with many MCP servers)
+	// Each tool has name + description + input_schema JSON
+	for _, t := range tools {
+		total += 4 // per-tool overhead
+		total += approxTokens(t.Name)
+		total += approxTokens(t.Description)
+		total += approxTokens(string(t.InputSchema))
+	}
+
+	// 3. Messages (chat history + thinking + tool results)
 	for _, m := range messages {
 		total += 4 // per-message overhead
 		total += approxTokens(m.Role)
 		total += approxTokens(m.Text())
 	}
+
+	total += 2 // conversation overhead
+	return total
+}
+
+// estimateInputTokensOpenAI estimates the total input token count for OpenAI API requests.
+// System prompt is already in messages (role: "system"), but tool definitions must be added.
+func estimateInputTokensOpenAI(messages []openai.ChatMessage, tools []openai.Tool) int {
+	total := 0
+
+	// 1. Tool definitions (~30-50K with many MCP servers)
+	for _, t := range tools {
+		total += 4 // per-tool overhead
+		total += approxTokens(t.Function.Name)
+		total += approxTokens(t.Function.Description)
+		total += approxTokens(string(t.Function.Parameters))
+	}
+
+	// 2. Messages (includes system prompt as role:"system")
+	for _, m := range messages {
+		total += 4 // per-message overhead
+		total += approxTokens(m.Role)
+		total += approxTokens(m.Text())
+	}
+
 	total += 2 // conversation overhead
 	return total
 }
