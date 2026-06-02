@@ -1120,10 +1120,17 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 	}
 
 	if len(result.ToolCalls) > 0 {
-		// Emit any remaining content before tool calls that wasn't streamed yet
-		remainingContent := strings.TrimSpace(result.Content)
-		if len(remainingContent) > emittedLen {
-			unsent := remainingContent[emittedLen:]
+		// Emit any remaining content before tool calls that wasn't streamed yet.
+		// Use raw accumulated text (not result.Content from parser) to avoid
+		// losing content that the parser may have stripped or restructured.
+		// Find where <tool_call starts in the raw text to know the boundary.
+		toolCallStart := strings.Index(accumulated, "<tool_call")
+		if toolCallStart < 0 {
+			toolCallStart = len(accumulated)
+		}
+		if toolCallStart > emittedLen {
+			unsent := accumulated[emittedLen:toolCallStart]
+			unsent = strings.TrimRight(unsent, " \t\n\r")
 			if unsent != "" {
 				role := ""
 				if !roleSent {
@@ -1140,12 +1147,22 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			}
 		}
 
-		// Emit tool calls as structured deltas
+		// Emit tool calls as incremental streaming deltas.
+		// OpenAI spec requires arguments to be streamed in small chunks,
+		// not as a single monolithic payload. Claude Code and other clients
+		// expect incremental argument deltas with consistent index/id.
+		const toolCallArgChunkSize = 80
 		for i, tc := range result.ToolCalls {
 			role := ""
 			if !roleSent {
 				role = "assistant"
 				roleSent = true
+			}
+			// First chunk: emit name + id + type + first argument slice
+			args := tc.Function.Arguments
+			firstChunk := args
+			if len(firstChunk) > toolCallArgChunkSize {
+				firstChunk = firstChunk[:toolCallArgChunkSize]
 			}
 			emit(openai.StreamChunk{
 				ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
@@ -1159,12 +1176,33 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 							Type:  "function",
 							Function: openai.ToolCallFuncDelta{
 								Name:      tc.Function.Name,
-								Arguments: tc.Function.Arguments,
+								Arguments: firstChunk,
 							},
 						}},
 					},
 				}},
 			})
+			// Subsequent chunks: emit remaining argument slices
+			for offset := toolCallArgChunkSize; offset < len(args); offset += toolCallArgChunkSize {
+				end := offset + toolCallArgChunkSize
+				if end > len(args) {
+					end = len(args)
+				}
+				emit(openai.StreamChunk{
+					ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+					Choices: []openai.StreamChoice{{
+						Index: 0,
+						Delta: openai.Delta{
+							ToolCalls: []openai.ToolCallDelta{{
+								Index: i,
+								Function: openai.ToolCallFuncDelta{
+									Arguments: args[offset:end],
+								},
+							}},
+						},
+					}},
+				})
+			}
 		}
 
 		// Emit usage with tool_calls finish chunk
