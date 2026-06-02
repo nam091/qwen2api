@@ -347,7 +347,17 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			_ = body.Close()
 		}()
-		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools, inputTokensFallback)
+		// Build Continuer for truncation auto-continuation (only when tools present)
+		var cont toolcall.Continuer
+		if hasTools {
+			cont = &qwenContinuer{
+				client:  h.deps.Qwen,
+				token:   token.Value,
+				chatID:  upstreamReq.ChatID,
+				baseReq: upstreamReq,
+			}
+		}
+		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools, inputTokensFallback, cont)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 		h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
 		// Store session messages after streaming (we don't have the response text,
@@ -868,9 +878,9 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 }
 
 // proxyStream re-emits upstream events as OpenAI-style SSE chunks.
-func (h *handlers) proxyStream(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool, inputTokensFallback int) {
+func (h *handlers) proxyStream(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool, inputTokensFallback int, cont toolcall.Continuer) {
 	if hasTools {
-		h.proxyStreamWithToolDetection(ctx, w, body, id, created, model, inputTokensFallback)
+		h.proxyStreamWithToolDetection(ctx, w, body, id, created, model, inputTokensFallback, cont)
 		return
 	}
 	h.proxyStreamDirect(ctx, w, body, id, created, model, inputTokensFallback)
@@ -997,7 +1007,7 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 // proxyStreamWithToolDetection buffers the stream to detect <tool_call> blocks.
 // Content before the first <tool_call> is streamed normally. Once detected,
 // the remainder is buffered and tool calls are emitted as structured deltas.
-func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, inputTokensFallback int) {
+func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, inputTokensFallback int, cont toolcall.Continuer) {
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -1098,6 +1108,17 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 	accumulated := fullContent.String()
 	result := toolcall.ParseWithFormats(accumulated, h.deps.Config.Features.MultiFormatToolParsing)
 
+	// Nếu có dấu hiệu bị cắt mà chưa ra tool call → thử xin model viết tiếp.
+	if cont != nil &&
+		(toolcall.HasUnclosedToolCall(accumulated) ||
+			(len(result.ToolCalls) == 0 && toolcall.SawToolMarker(accumulated))) {
+		if res, ok := toolcall.ResolveTruncatedToolCall(
+			ctx, accumulated, h.deps.Config.Features.MultiFormatToolParsing, cont,
+		); ok {
+			result = res // rơi xuống nhánh emit tool_calls bên dưới
+		}
+	}
+
 	if len(result.ToolCalls) > 0 {
 		// Emit any remaining content before tool calls that wasn't streamed yet
 		remainingContent := strings.TrimSpace(result.Content)
@@ -1178,10 +1199,19 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			}
 		}
 
+		// Determine finish reason based on what we observed
 		finish := "stop"
-		if truncated {
-			// Upstream stream errored mid-response; signal truncation
-			// rather than pretending the model finished cleanly.
+		switch {
+		case toolcall.HasUnclosedToolCall(accumulated):
+			// Model started a <tool_call> but stream cut off before closing it.
+			// This is the #1 cause of agents "stopping" after calling a tool.
+			finish = "length"
+		case toolcall.SawToolMarker(accumulated):
+			// Model showed intent to call a tool but parsing yielded 0 calls
+			// (malformed JSON that jsonrepair couldn't fix).
+			finish = "length"
+		case truncated:
+			// Upstream stream errored mid-response; signal truncation.
 			finish = "length"
 		}
 		outputTokens := approxTokens(accumulated)

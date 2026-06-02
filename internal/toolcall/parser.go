@@ -21,6 +21,10 @@ var (
 	reFunctionXML       = regexp.MustCompile(`(?s)<function=([^>]+)>(.*?)</function>`)
 	reParameter         = regexp.MustCompile(`(?s)<parameter=([^>]+?)>(.*?)</parameter>`)
 	reBareJSON          = regexp.MustCompile(`(?s)\{\s*"name"\s*:\s*"[^"]+"\s*,\s*"arguments"\s*:\s*(?:\{.*?\}|"[^"]*"|null)\s*\}`)
+	// reWrappedFence matches when the entire content is wrapped in a code fence
+	// (```json ... ```) to avoid touching fences that appear legitimately
+	// inside argument values (e.g. code snippets in string fields).
+	reWrappedFence = regexp.MustCompile("(?s)^```[a-zA-Z0-9]*\\s*(.*?)\\s*```$")
 	// reHybridToolCallBlock matches <tool_call> openers paired with non-
 	// canonical closers (</function>, </function_calls>) that some models
 	// emit when they confuse Qwen and Anthropic tool-call formats.
@@ -43,10 +47,40 @@ func Parse(text string) ParseResult {
 	return ParseWithFormats(text, true)
 }
 
+// closeUnclosedToolCallTags auto-closes any <tool_call> tags that weren't closed.
+// This handles the common case where Qwen3.7-max opens a tool call but the
+// stream cuts off or the model forgets to close it, which would otherwise
+// cause the entire tool call to be silently dropped.
+//
+// Hybrid closers (</function>, </function_calls>) are also counted because
+// the model sometimes pairs a <tool_call> opener with a non-canonical closer.
+// Without counting those, we'd append a stray </tool_call> at the end of
+// text, causing reToolCallBlock to greedily swallow trailing prose.
+func closeUnclosedToolCallTags(text string) string {
+	opens := strings.Count(text, "<tool_call>")
+	closes := strings.Count(text, "</tool_call>")
+
+	// Hybrid closers that pair with <tool_call> in malformed output.
+	hybridCloses := strings.Count(text, "</function>") +
+		strings.Count(text, "</function_calls>")
+
+	totalCloses := closes + hybridCloses
+	if opens <= totalCloses {
+		return text
+	}
+
+	// Auto-close only the truly unclosed tags.
+	unclosed := opens - totalCloses
+	return text + strings.Repeat("\n</tool_call>", unclosed)
+}
+
 // ParseWithFormats extracts tool calls from text. When multiFormat is true,
 // also recognizes Claude-style <function_calls><invoke> blocks and bare JSON.
 // Applies hallucination protection to filter invalid/duplicate calls.
 func ParseWithFormats(text string, multiFormat bool) ParseResult {
+	// Auto-close unclosed  tags before parsing
+	text = closeUnclosedToolCallTags(text)
+
 	calls, content := parseToolCallBlocks(text)
 	if !multiFormat {
 		// Hybrid <tool_call>...</function> blocks are accepted even in
@@ -172,7 +206,22 @@ func parseBareJSON(text string) ([]openai.ToolCall, string) {
 	return calls, content.String()
 }
 
+// stripCodeFences removes markdown code fences that wrap the entire block.
+// Models sometimes emit ```json ... ``` around tool call JSON, which breaks
+// JSON validation. We only strip fences that wrap the entire string to avoid
+// touching fences that appear legitimately inside argument values.
+func stripCodeFences(s string) string {
+	s = strings.TrimSpace(s)
+	if m := reWrappedFence.FindStringSubmatch(s); m != nil {
+		return strings.TrimSpace(m[1])
+	}
+	return s
+}
+
 func parseBlock(inner string) (openai.ToolCall, bool) {
+	// Strip code fences first — models sometimes wrap JSON in ```json ```
+	inner = stripCodeFences(inner)
+
 	// Try to repair the entire block first if it's not valid JSON
 	if !json.Valid([]byte(inner)) {
 		repaired, changed := jsonrepair.Repair(inner)
@@ -338,4 +387,22 @@ func parseXML(inner string) (openai.ToolCall, bool) {
 
 func generateID() string {
 	return fmt.Sprintf("call_%s", uuid.NewString()[:8])
+}
+
+// HasUnclosedToolCall reports whether text contains an opening <tool_call>
+// without a matching </tool_call>. This strongly suggests the stream was
+// truncated mid-tool-call, which is the #1 cause of agents "stopping" after
+// calling a tool.
+func HasUnclosedToolCall(s string) bool {
+	return strings.Count(s, "<tool_call>") > strings.Count(s, "</tool_call>")
+}
+
+// SawToolMarker reports whether text shows signs the model intended to call
+// a tool, even if parsing ultimately failed. Used to distinguish "model
+// finished cleanly with no tools" from "model tried to call a tool but the
+// output was malformed".
+func SawToolMarker(s string) bool {
+	return strings.Contains(s, "<tool_call>") ||
+		strings.Contains(s, "<function_calls>") ||
+		strings.Contains(s, "<invoke")
 }
