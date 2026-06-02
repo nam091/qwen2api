@@ -825,11 +825,36 @@ func approxTokens(s string) int {
 	if s == "" {
 		return 0
 	}
-	n := len(s) / 4
-	if n == 0 {
+	tokens := 0
+	for _, r := range s {
+		if r >= 0x4E00 && r <= 0x9FFF || r >= 0x3400 && r <= 0x4DBF || r >= 0xF900 && r <= 0xFAFF {
+			tokens += 2 // CJK characters
+		} else if r <= 127 {
+			tokens += 1 // ASCII: ~4 chars per token
+			if tokens%4 != 0 {
+				// keep counting, will divide at end
+			}
+		} else {
+			tokens += 1 // Other non-ASCII
+		}
+	}
+	// Better approximation: count bytes then divide
+	// For mixed content, use byte-length based with CJK adjustment
+	cjkCount := 0
+	for _, r := range s {
+		if r >= 0x4E00 && r <= 0x9FFF || r >= 0x3400 && r <= 0x4DBF || r >= 0xF900 && r <= 0xFAFF {
+			cjkCount++
+		}
+	}
+	nonCJKBytes := len(s) - cjkCount*3
+	if nonCJKBytes < 0 {
+		nonCJKBytes = 0
+	}
+	result := cjkCount*2 + nonCJKBytes/4
+	if result < 1 {
 		return 1
 	}
-	return n
+	return result
 }
 
 func min(a, b int) int {

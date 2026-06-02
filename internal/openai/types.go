@@ -290,10 +290,11 @@ type ModelList struct {
 
 // Model is one entry of /v1/models.
 type Model struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	OwnedBy string `json:"owned_by"`
+	ID            string `json:"id"`
+	Object        string `json:"object"`
+	Created       int64  `json:"created"`
+	OwnedBy       string `json:"owned_by"`
+	ContextLength int    `json:"context_length"`
 }
 
 // ErrorEnvelope is the OpenAI-style error response.

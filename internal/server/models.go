@@ -7,6 +7,7 @@ import (
 
 	"github.com/keaume34/qwen2api/internal/openai"
 	"github.com/keaume34/qwen2api/internal/qwen"
+	"github.com/keaume34/qwen2api/internal/session"
 )
 
 // staticModels is the fallback model list used when the upstream /api/models
@@ -74,6 +75,12 @@ func (h *handlers) refreshModels() []string {
 	return ids
 }
 
+
+// modelContextLength returns the context window size for a model ID.
+func modelContextLength(modelID string) int {
+	return session.GetContextWindow(modelID, 32768)
+}
+
 func (h *handlers) listModels(w http.ResponseWriter, r *http.Request) {
 	now := unixNow()
 	out := openai.ModelList{Object: "list"}
@@ -82,10 +89,11 @@ func (h *handlers) listModels(w http.ResponseWriter, r *http.Request) {
 	if cached, ok := syncedModels.Load().([]string); ok && len(cached) > 0 {
 		for _, id := range cached {
 			out.Data = append(out.Data, openai.Model{
-				ID:      id,
-				Object:  "model",
-				Created: now,
-				OwnedBy: "qwen",
+				ID:            id,
+				Object:        "model",
+				Created:       now,
+				OwnedBy:       "qwen",
+				ContextLength: modelContextLength(id),
 			})
 		}
 		writeJSON(w, http.StatusOK, out)
@@ -122,10 +130,11 @@ func (h *handlers) listModels(w http.ResponseWriter, r *http.Request) {
 	if len(out.Data) == 0 {
 		for _, id := range staticModels {
 			out.Data = append(out.Data, openai.Model{
-				ID:      id,
-				Object:  "model",
-				Created: now,
-				OwnedBy: "qwen",
+				ID:            id,
+				Object:        "model",
+				Created:       now,
+				OwnedBy:       "qwen",
+				ContextLength: modelContextLength(id),
 			})
 		}
 	}

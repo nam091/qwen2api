@@ -1347,13 +1347,19 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 		// Emit usage with tool_calls finish chunk
 		outputTokens := approxTokens(accumulated)
 		toolCalls := "tool_calls"
+		promptTokens := inputTokensFallback
+		totalCompletion := outputTokens
+		if hasUpstreamUsage {
+			promptTokens = upstreamInputTokens
+			totalCompletion = upstreamOutputTokens
+		}
 		emit(openai.StreamChunk{
 			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
 			Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &toolCalls}},
 			Usage: &openai.Usage{
-				PromptTokens:     inputTokensFallback,
-				CompletionTokens: outputTokens,
-				TotalTokens:      inputTokensFallback + outputTokens,
+				PromptTokens:     promptTokens,
+				CompletionTokens: totalCompletion,
+				TotalTokens:      promptTokens + totalCompletion,
 			},
 		})
 	} else {

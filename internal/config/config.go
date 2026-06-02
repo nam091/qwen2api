@@ -185,7 +185,7 @@ func Default() Config {
 			SummaryEveryNTurns:  5,
 			SummaryModel:        "",
 			DataDir:             "",
-			ContextWindowTokens: 32768,
+			ContextWindowTokens: 131072,
 			CompactThreshold:    0.8,
 		},
 		ModelAliases: map[string]string{
