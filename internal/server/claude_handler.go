@@ -419,15 +419,16 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 				writeSSEKeepAlive(w, flusher)
 				return nil
 			}
-			if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
-				if evt.Delta != nil && evt.Delta.Usage != nil {
-					if evt.Delta.Usage.InputTokens > 0 {
-						inputTokens = evt.Delta.Usage.InputTokens
-					}
-					if evt.Delta.Usage.OutputTokens > 0 {
-						outputTokens = evt.Delta.Usage.OutputTokens
-					}
+			// Capture upstream usage from ANY event that has it
+			if evt.Delta != nil && evt.Delta.Usage != nil {
+				if evt.Delta.Usage.InputTokens > 0 {
+					inputTokens = evt.Delta.Usage.InputTokens
 				}
+				if evt.Delta.Usage.OutputTokens > 0 {
+					outputTokens = evt.Delta.Usage.OutputTokens
+				}
+			}
+			if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
 				return nil
 			}
 			choice := evt.Delta.Choices[0]

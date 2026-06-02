@@ -48,6 +48,15 @@ type MessagesRequest struct {
 	StopSequences []string        `json:"stop_sequences,omitempty"`
 	Tools         []Tool          `json:"tools,omitempty"`
 	ToolChoice    json.RawMessage `json:"tool_choice,omitempty"`
+	// Thinking is the extended thinking configuration from the Anthropic API.
+	// When type="enabled", thinking mode is activated.
+	Thinking *ThinkingConfig `json:"thinking,omitempty"`
+}
+
+// ThinkingConfig represents the thinking parameter in Anthropic API.
+type ThinkingConfig struct {
+	Type         string `json:"type"`          // "enabled" or "disabled"
+	BudgetTokens int    `json:"budget_tokens"` // max tokens for thinking
 }
 
 // Message is a single message in the conversation.

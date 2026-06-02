@@ -798,8 +798,11 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 	}()
 	reader := qwen.NewStreamReader(body)
 	var content strings.Builder
+	var reasoningContent strings.Builder
 	inThinking := false
 	finishReason := "stop"
+	var upstreamInputTokens, upstreamOutputTokens int
+	var hasUpstreamUsage bool
 
 	for {
 		evt, err := reader.Next()
@@ -812,13 +815,33 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 		if evt.Done {
 			break
 		}
+		// Capture upstream usage if present
+		if evt.Delta != nil && evt.Delta.Usage != nil {
+			if evt.Delta.Usage.InputTokens > 0 {
+				upstreamInputTokens = evt.Delta.Usage.InputTokens
+			}
+			if evt.Delta.Usage.OutputTokens > 0 {
+				upstreamOutputTokens = evt.Delta.Usage.OutputTokens
+			}
+			hasUpstreamUsage = true
+		}
 		if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
 			continue
 		}
 		choice := evt.Delta.Choices[0]
-		text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
-		inThinking = next
-		content.WriteString(text)
+		phase := choice.Delta.Phase
+		rawText := choice.Delta.Content
+		if phase == "think" {
+			reasoningContent.WriteString(rawText)
+			inThinking = true
+		} else {
+			if inThinking {
+				inThinking = false
+			}
+			text, next := wrapThinking(rawText, phase, inThinking)
+			inThinking = next
+			content.WriteString(text)
+		}
 		if choice.FinishReason != nil {
 			finishReason = *choice.FinishReason
 		}
@@ -828,11 +851,27 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 	}
 
 	fullContent := content.String()
-	outputTokens := approxTokens(fullContent)
+	fullReasoning := reasoningContent.String()
+	outputTokens := approxTokens(fullContent) + approxTokens(fullReasoning)
+	reasoningTokens := approxTokens(fullReasoning)
+
+	promptTokens := inputTokensFallback
+	estimated := true
+	if hasUpstreamUsage {
+		promptTokens = upstreamInputTokens
+		outputTokens = upstreamOutputTokens
+		estimated = false
+	}
 	usage := openai.Usage{
-		PromptTokens:     inputTokensFallback,
+		PromptTokens:     promptTokens,
 		CompletionTokens: outputTokens,
-		TotalTokens:      inputTokensFallback + outputTokens,
+		TotalTokens:      promptTokens + outputTokens,
+		Estimated:        estimated,
+	}
+	if reasoningTokens > 0 {
+		usage.CompletionTokensDetails = &openai.CompletionTokensDetails{
+			ReasoningTokens: reasoningTokens,
+		}
 	}
 	truncated := hasTools && isTruncatedToolCallContent(fullContent)
 	if hasTools {
@@ -850,8 +889,9 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 				Choices: []openai.Choice{{
 					Index: 0,
 					Message: openai.ChatMessageOut{
-						Role:      "assistant",
-						Content:   contentPtr,
+						Role:             "assistant",
+						Content:          contentPtr,
+						ReasoningContent: fullReasoning,
 						ToolCalls: result.ToolCalls,
 					},
 					FinishReason: "tool_calls",
@@ -869,7 +909,7 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 		Model:   model,
 		Choices: []openai.Choice{{
 			Index:        0,
-			Message:      openai.ChatMessageOut{Role: "assistant", Content: strPtr(fullContent)},
+			Message:      openai.ChatMessageOut{Role: "assistant", Content: strPtr(fullContent), ReasoningContent: fullReasoning},
 			FinishReason: finishReason,
 		}},
 		Usage: usage,
@@ -898,7 +938,10 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 	reader := qwen.NewStreamReader(body)
 	roleSent := false
 	inThinking := false
-	var outputLen int // track total output bytes for token estimation
+	var outputLen int      // track total output bytes for token estimation
+	var reasoningLen int   // track reasoning bytes separately for reasoning_tokens
+	var upstreamInputTokens, upstreamOutputTokens int
+	var hasUpstreamUsage bool
 
 	flush := func() {
 		if flusher != nil {
@@ -935,6 +978,16 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 				writeSSEKeepAlive(w, flusher)
 				return nil
 			}
+			// Capture upstream usage if present (may come in a separate event)
+			if evt.Delta != nil && evt.Delta.Usage != nil {
+				if evt.Delta.Usage.InputTokens > 0 {
+					upstreamInputTokens = evt.Delta.Usage.InputTokens
+				}
+				if evt.Delta.Usage.OutputTokens > 0 {
+					upstreamOutputTokens = evt.Delta.Usage.OutputTokens
+				}
+				hasUpstreamUsage = true
+			}
 			if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
 				return nil
 			}
@@ -945,26 +998,48 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 				roleSent = true
 			}
 			text := choice.Delta.Content
-			text, inThinking = wrapThinking(text, choice.Delta.Phase, inThinking)
-			if choice.FinishReason != nil {
-				upstreamFinish = *choice.FinishReason
+			phase := choice.Delta.Phase
+
+			// Emit reasoning_content for thinking phase, content for answer phase
+			if phase == "think" {
+				if text == "" && role == "" && choice.FinishReason == nil {
+					return nil
+				}
+				reasoningLen += len(text)
+				chunk := openai.StreamChunk{
+					ID:      id,
+					Object:  "chat.completion.chunk",
+					Created: created,
+					Model:   model,
+					Choices: []openai.StreamChoice{{
+						Index:        0,
+						Delta:        openai.Delta{Role: role, ReasoningContent: text},
+						FinishReason: choice.FinishReason,
+					}},
+				}
+				emit(chunk)
+			} else {
+				text, inThinking = wrapThinking(text, phase, inThinking)
+				if choice.FinishReason != nil {
+					upstreamFinish = *choice.FinishReason
+				}
+				if text == "" && role == "" && choice.FinishReason == nil {
+					return nil
+				}
+				outputLen += len(text)
+				chunk := openai.StreamChunk{
+					ID:      id,
+					Object:  "chat.completion.chunk",
+					Created: created,
+					Model:   model,
+					Choices: []openai.StreamChoice{{
+						Index:        0,
+						Delta:        openai.Delta{Role: role, Content: text},
+						FinishReason: choice.FinishReason,
+					}},
+				}
+				emit(chunk)
 			}
-			if text == "" && role == "" && choice.FinishReason == nil {
-				return nil
-			}
-			outputLen += len(text)
-			chunk := openai.StreamChunk{
-				ID:      id,
-				Object:  "chat.completion.chunk",
-				Created: created,
-				Model:   model,
-				Choices: []openai.StreamChoice{{
-					Index:        0,
-					Delta:        openai.Delta{Role: role, Content: text},
-					FinishReason: choice.FinishReason,
-				}},
-			}
-			emit(chunk)
 			return nil
 		},
 		func() { writeSSEKeepAlive(w, flusher) },
@@ -991,14 +1066,37 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 	if outputTokens == 0 && outputLen > 0 {
 		outputTokens = 1
 	}
+	reasoningTokens := reasoningLen / 4
+	if reasoningTokens == 0 && reasoningLen > 0 {
+		reasoningTokens = 1
+	}
+	// completion_tokens must include reasoning tokens — they are part of the output.
+	totalCompletion := outputTokens + reasoningTokens
+
+	promptTokens := inputTokensFallback
+	estimated := true
+	if hasUpstreamUsage {
+		// Prefer real upstream token counts over our estimates.
+		promptTokens = upstreamInputTokens
+		totalCompletion = upstreamOutputTokens
+		estimated = false
+	}
+
+	usage := &openai.Usage{
+		PromptTokens:     promptTokens,
+		CompletionTokens: totalCompletion,
+		TotalTokens:      promptTokens + totalCompletion,
+		Estimated:        estimated,
+	}
+	if reasoningTokens > 0 {
+		usage.CompletionTokensDetails = &openai.CompletionTokensDetails{
+			ReasoningTokens: reasoningTokens,
+		}
+	}
 	emit(openai.StreamChunk{
 		ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
 		Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &upstreamFinish}},
-		Usage: &openai.Usage{
-			PromptTokens:     inputTokensFallback,
-			CompletionTokens: outputTokens,
-			TotalTokens:      inputTokensFallback + outputTokens,
-		},
+		Usage:  usage,
 	})
 	fmt.Fprint(w, "data: [DONE]\n\n")
 	flush()
@@ -1019,6 +1117,9 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 	inThinking := false
 	var fullContent strings.Builder
 	var emittedLen int
+	var reasoningLen int
+	var upstreamInputTokens, upstreamOutputTokens int
+	var hasUpstreamUsage bool
 	triggered := false
 	roleSent := false
 
@@ -1050,11 +1151,44 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 				writeSSEKeepAlive(w, flusher)
 				return nil
 			}
+			// Capture upstream usage if present
+			if evt.Delta != nil && evt.Delta.Usage != nil {
+				if evt.Delta.Usage.InputTokens > 0 {
+					upstreamInputTokens = evt.Delta.Usage.InputTokens
+				}
+				if evt.Delta.Usage.OutputTokens > 0 {
+					upstreamOutputTokens = evt.Delta.Usage.OutputTokens
+				}
+				hasUpstreamUsage = true
+			}
 			if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
 				return nil
 			}
 			choice := evt.Delta.Choices[0]
-			text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
+			phase := choice.Delta.Phase
+			rawContent := choice.Delta.Content
+
+			// Emit reasoning_content for thinking phase directly
+			if phase == "think" {
+				if rawContent != "" {
+					reasoningLen += len(rawContent)
+					role := ""
+					if !roleSent {
+						role = "assistant"
+						roleSent = true
+					}
+					emit(openai.StreamChunk{
+						ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+						Choices: []openai.StreamChoice{{
+							Index: 0,
+							Delta: openai.Delta{Role: role, ReasoningContent: rawContent},
+						}},
+					})
+				}
+				return nil
+			}
+
+			text, next := wrapThinking(rawContent, phase, inThinking)
 			inThinking = next
 			fullContent.WriteString(text)
 
@@ -1253,14 +1387,33 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			finish = "length"
 		}
 		outputTokens := approxTokens(accumulated)
+		reasoningTokens := reasoningLen / 4
+		if reasoningTokens == 0 && reasoningLen > 0 {
+			reasoningTokens = 1
+		}
+		totalCompletion := outputTokens + reasoningTokens
+		promptTokens := inputTokensFallback
+		estimated := true
+		if hasUpstreamUsage {
+			promptTokens = upstreamInputTokens
+			totalCompletion = upstreamOutputTokens
+			estimated = false
+		}
+		usage := &openai.Usage{
+			PromptTokens:     promptTokens,
+			CompletionTokens: totalCompletion,
+			TotalTokens:      promptTokens + totalCompletion,
+			Estimated:        estimated,
+		}
+		if reasoningTokens > 0 {
+			usage.CompletionTokensDetails = &openai.CompletionTokensDetails{
+				ReasoningTokens: reasoningTokens,
+			}
+		}
 		emit(openai.StreamChunk{
 			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
 			Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &finish}},
-			Usage: &openai.Usage{
-				PromptTokens:     inputTokensFallback,
-				CompletionTokens: outputTokens,
-				TotalTokens:      inputTokensFallback + outputTokens,
-			},
+			Usage:  usage,
 		})
 	}
 

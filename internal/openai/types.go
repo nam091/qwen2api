@@ -189,16 +189,32 @@ type Choice struct {
 
 // ChatMessageOut is the assistant message returned to the client.
 type ChatMessageOut struct {
-	Role      string     `json:"role"`
-	Content   *string    `json:"content"`
-	ToolCalls []ToolCall `json:"tool_calls,omitempty"`
+	Role             string     `json:"role"`
+	Content          *string    `json:"content"`
+	ReasoningContent string     `json:"reasoning_content,omitempty"`
+	ToolCalls        []ToolCall `json:"tool_calls,omitempty"`
 }
 
 // Usage carries token accounting.
 type Usage struct {
-	PromptTokens     int `json:"prompt_tokens"`
-	CompletionTokens int `json:"completion_tokens"`
-	TotalTokens      int `json:"total_tokens"`
+	PromptTokens     int  `json:"prompt_tokens"`
+	CompletionTokens int  `json:"completion_tokens"`
+	TotalTokens      int  `json:"total_tokens"`
+	Estimated        bool `json:"estimated,omitempty"`
+
+	// Detailed breakdown for reasoning models.
+	CompletionTokensDetails *CompletionTokensDetails `json:"completion_tokens_details,omitempty"`
+	PromptTokensDetails     *PromptTokensDetails     `json:"prompt_tokens_details,omitempty"`
+}
+
+// CompletionTokensDetails breaks down completion tokens.
+type CompletionTokensDetails struct {
+	ReasoningTokens int `json:"reasoning_tokens,omitempty"`
+}
+
+// PromptTokensDetails breaks down prompt tokens.
+type PromptTokensDetails struct {
+	CachedTokens int `json:"cached_tokens,omitempty"`
 }
 
 // StreamChunk is one SSE chunk emitted to the client.
@@ -220,9 +236,10 @@ type StreamChoice struct {
 
 // Delta is the incremental content for a stream chunk.
 type Delta struct {
-	Role      string          `json:"role,omitempty"`
-	Content   string          `json:"content,omitempty"`
-	ToolCalls []ToolCallDelta `json:"tool_calls,omitempty"`
+	Role             string          `json:"role,omitempty"`
+	Content          string          `json:"content,omitempty"`
+	ReasoningContent string          `json:"reasoning_content,omitempty"`
+	ToolCalls        []ToolCallDelta `json:"tool_calls,omitempty"`
 }
 
 // Tool describes a function the model may call.

@@ -41,7 +41,7 @@ func ToOpenAI(req MessagesRequest) (openai.ChatRequest, error) {
 		})
 	}
 
-	return openai.ChatRequest{
+	oaiReq := openai.ChatRequest{
 		Model:       req.Model,
 		Messages:    messages,
 		Stream:      req.Stream,
@@ -50,7 +50,16 @@ func ToOpenAI(req MessagesRequest) (openai.ChatRequest, error) {
 		MaxTokens:   &req.MaxTokens,
 		Tools:       tools,
 		ToolChoice:  req.ToolChoice,
-	}, nil
+	}
+
+	// Convert thinking config — when Anthropic sends thinking.type="enabled",
+	// set EnableThinking on the OpenAI request so upstream activates reasoning.
+	if req.Thinking != nil && req.Thinking.Type == "enabled" {
+		t := true
+		oaiReq.EnableThinking = &t
+	}
+
+	return oaiReq, nil
 }
 
 func convertMessage(msg Message) (openai.ChatMessage, error) {
