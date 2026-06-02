@@ -54,6 +54,8 @@ func (q *qwenContinuer) ContinueOnce(ctx context.Context, priorText string) (str
 }
 
 // drainStreamToText gom toàn bộ delta content của một SSE stream thành text.
+// Chỉ lấy content ở phase "answer" hoặc không có phase — bỏ qua thinking
+// content (phase "think") để tránh lẫn <think>...</think> vào JSON tool call.
 func drainStreamToText(r io.Reader) string {
 	reader := qwen.NewStreamReader(r)
 	var sb strings.Builder
@@ -62,9 +64,15 @@ func drainStreamToText(r io.Reader) string {
 		if err != nil || evt.Done {
 			break
 		}
-		if evt.Delta != nil && len(evt.Delta.Choices) > 0 {
-			sb.WriteString(evt.Delta.Choices[0].Delta.Content)
+		if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
+			continue
 		}
+		delta := evt.Delta.Choices[0].Delta
+		// Skip thinking content — only collect answer-phase text.
+		if delta.Phase == "think" {
+			continue
+		}
+		sb.WriteString(delta.Content)
 	}
 	return sb.String()
 }

@@ -390,11 +390,16 @@ func generateID() string {
 }
 
 // HasUnclosedToolCall reports whether text contains an opening <tool_call>
-// without a matching </tool_call>. This strongly suggests the stream was
-// truncated mid-tool-call, which is the #1 cause of agents "stopping" after
-// calling a tool.
+// without a matching closer. Hybrid closers (</function>, </function_calls>)
+// are also counted because the model sometimes pairs a <tool_call> opener
+// with a non-canonical closer. Without counting those, hybrid-format tool
+// calls would falsely trigger continuation.
 func HasUnclosedToolCall(s string) bool {
-	return strings.Count(s, "<tool_call>") > strings.Count(s, "</tool_call>")
+	opens := strings.Count(s, "<tool_call>")
+	closes := strings.Count(s, "</tool_call>") +
+		strings.Count(s, "</function>") +
+		strings.Count(s, "</function_calls>")
+	return opens > closes
 }
 
 // SawToolMarker reports whether text shows signs the model intended to call
