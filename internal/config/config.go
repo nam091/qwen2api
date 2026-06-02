@@ -159,7 +159,7 @@ func Default() Config {
 			APIKeyRotation:         false,
 			BrowserEngineFallback:  false,
 			Tunnel:                 true,
-			ThinkingMode:           "auto",
+			ThinkingMode:           "off",
 		},
 		Cache: CacheConfig{
 			MaxEntries: 256,
