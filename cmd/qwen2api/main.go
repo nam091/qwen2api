@@ -1,4 +1,4 @@
-﻿// Command qwen2api launches the OpenAI-compatible HTTP gateway for chat.qwen.ai.
+// Command qwen2api launches the OpenAI-compatible HTTP gateway for chat.qwen.ai.
 package main
 
 import (
