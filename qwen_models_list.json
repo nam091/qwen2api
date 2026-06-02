@@ -1,0 +1,143 @@
+{
+  "object": "list",
+  "data": [
+    {
+      "id": "qwen3.6-plus",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.7-max",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.6-max-preview",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.6-27b",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-latest-series-invite-beta-v24",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-latest-series-invite-beta-v16",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.5-plus",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.5-omni-plus",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.6-35b-a3b",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.5-flash",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.5-max-2026-03-08",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.6-plus-preview",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.5-397b-a17b",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.5-122b-a10b",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.5-omni-flash",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.5-27b",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3.5-35b-a3b",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3-max-2026-01-23",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-plus-2025-07-28",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3-coder-plus",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3-vl-plus",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen3-omni-flash-2025-12-01",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    },
+    {
+      "id": "qwen-max-latest",
+      "object": "model",
+      "created": 1780168936,
+      "owned_by": "qwen"
+    }
+  ]
+}

@@ -4,11 +4,14 @@
 *.exe
 *.test
 *.out
+*.zip
+
 
 # Local config / secrets
 config.json
 .env
 .env.local
+.claude/
 
 # Node helper deps
 scripts/node_modules/
@@ -19,3 +22,7 @@ scripts/package-lock.json
 .vscode/
 *.swp
 .DS_Store
+
+
+vercel.json
+server.log
