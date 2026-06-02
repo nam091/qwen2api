@@ -51,6 +51,11 @@ func (m *Manager) Start(interval time.Duration) {
 		interval = DefaultRefreshInterval
 	}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				m.logger.Error("ssxmod refresh loop panic recovered", "panic", r)
+			}
+		}()
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
 		for {
@@ -195,6 +200,9 @@ func lzwCompress(input string) string {
 }
 
 func pickRandom(choices []string) string {
+	if len(choices) == 0 {
+		return ""
+	}
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(choices))))
 	if err != nil {
 		return choices[0]

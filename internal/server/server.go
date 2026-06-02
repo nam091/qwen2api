@@ -42,6 +42,7 @@ type Deps struct {
 		Stop() error
 		Status() (running bool, url string, port int)
 	}
+	ShutdownCh chan struct{}
 }
 
 // New returns the configured http.Handler.

@@ -516,7 +516,13 @@ func (h *handlers) shutdownServer(w http.ResponseWriter, r *http.Request) {
 	}
 	go func() {
 		time.Sleep(500 * time.Millisecond)
-		os.Exit(0)
+		if h.deps.ShutdownCh != nil {
+			select {
+			case <-h.deps.ShutdownCh:
+			default:
+				close(h.deps.ShutdownCh)
+			}
+		}
 	}()
 }
 

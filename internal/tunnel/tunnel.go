@@ -70,6 +70,11 @@ func (m *Manager) Start(port int) (string, error) {
 	urlPattern := regexp.MustCompile(`https://[a-z0-9-]+\.trycloudflare\.com`)
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				m.logger.Error("tunnel stdout scanner panic recovered", "panic", r)
+			}
+		}()
 		scanner := bufio.NewScanner(stdout)
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -84,6 +89,11 @@ func (m *Manager) Start(port int) (string, error) {
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				m.logger.Error("tunnel stderr scanner panic recovered", "panic", r)
+			}
+		}()
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -98,6 +108,11 @@ func (m *Manager) Start(port int) (string, error) {
 	}()
 
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				m.logger.Error("tunnel cmd.Wait panic recovered", "panic", r)
+			}
+		}()
 		if err := cmd.Wait(); err != nil {
 			m.logger.Warn("cloudflared exited", "err", err)
 			select {

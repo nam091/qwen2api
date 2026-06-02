@@ -112,6 +112,9 @@ func platformToChUA(platform string) string {
 }
 
 func pick(choices []string) string {
+	if len(choices) == 0 {
+		return ""
+	}
 	n, err := rand.Int(rand.Reader, big.NewInt(int64(len(choices))))
 	if err != nil {
 		return choices[0]

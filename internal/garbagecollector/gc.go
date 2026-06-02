@@ -90,6 +90,11 @@ func (g *GC) ActiveCount() int {
 // tokens to use for listing/deleting chats.
 func (g *GC) Start(deleter ChatDeleter, tokenFn func() string) {
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				slog.Error("gc loop panic recovered", "panic", r)
+			}
+		}()
 		ticker := time.NewTicker(g.interval)
 		defer ticker.Stop()
 		for {

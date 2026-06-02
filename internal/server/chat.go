@@ -764,6 +764,11 @@ func (h *handlers) storeSessionAndMaybeSummarize(hash string, reqMsgs []openai.C
 		}
 		currentSummary := h.sessionStore.GetSummary(hash)
 		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					h.deps.Logger.Error("rolling summary panic recovered", "panic", r)
+				}
+			}()
 			ctx := context.Background()
 			newSummary, err := session.GenerateSummary(ctx, h.deps.Qwen, token, summaryModel, msgs, currentSummary)
 			if err != nil {
