@@ -5,6 +5,8 @@
 *.test
 *.out
 *.zip
+*.exe*
+qwen2api-linux*
 
 
 # Local config / secrets
