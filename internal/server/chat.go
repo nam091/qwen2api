@@ -868,9 +868,9 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 		estimated = false
 	}
 	usage := openai.Usage{
-		PromptTokens:     promptTokens,
+		PromptTokens:     promptTokens + bufferTokens,
 		CompletionTokens: outputTokens,
-		TotalTokens:      promptTokens + outputTokens,
+		TotalTokens:      promptTokens + outputTokens + bufferTokens,
 		Estimated:        estimated,
 	}
 	if reasoningTokens > 0 {
@@ -1088,9 +1088,9 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 	}
 
 	usage := &openai.Usage{
-		PromptTokens:     promptTokens,
+		PromptTokens:     promptTokens + bufferTokens,
 		CompletionTokens: totalCompletion,
-		TotalTokens:      promptTokens + totalCompletion,
+		TotalTokens:      promptTokens + totalCompletion + bufferTokens,
 		Estimated:        estimated,
 	}
 	if reasoningTokens > 0 {
@@ -1357,9 +1357,9 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
 			Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &toolCalls}},
 			Usage: &openai.Usage{
-				PromptTokens:     promptTokens,
+				PromptTokens:     promptTokens + bufferTokens,
 				CompletionTokens: totalCompletion,
-				TotalTokens:      promptTokens + totalCompletion,
+				TotalTokens:      promptTokens + totalCompletion + bufferTokens,
 			},
 		})
 	} else {
@@ -1411,9 +1411,9 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			estimated = false
 		}
 		usage := &openai.Usage{
-			PromptTokens:     promptTokens,
+			PromptTokens:     promptTokens + bufferTokens,
 			CompletionTokens: totalCompletion,
-			TotalTokens:      promptTokens + totalCompletion,
+			TotalTokens:      promptTokens + totalCompletion + bufferTokens,
 			Estimated:        estimated,
 		}
 		if reasoningTokens > 0 {

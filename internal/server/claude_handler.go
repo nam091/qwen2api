@@ -22,6 +22,10 @@ import (
 	"github.com/keaume34/qwen2api/internal/toolcall"
 )
 
+// bufferTokens is added to input_tokens in responses so clients auto-compact
+// earlier, preventing context overflow errors (learned from 9Router).
+const bufferTokens = 2000
+
 func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	defer func() {
@@ -768,6 +772,30 @@ func intPtrLocal(i int) *int { return &i }
 // Includes messages, system prompt, and tool definitions. Claude Code uses this to track
 // context window usage and decide when to compact — missing any component causes it
 // to underestimate and delay compaction until it's too late.
+// claudeCountTokens handles POST /v1/messages/count_tokens.
+// Claude Code calls this before each request to estimate prompt token usage.
+func (h *handlers) claudeCountTokens(w http.ResponseWriter, r *http.Request) {
+	var req claude.MessagesRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeClaudeError(w, http.StatusBadRequest, "invalid_request_error", "invalid JSON body: "+err.Error())
+		return
+	}
+
+	// Convert to OpenAI format to reuse existing estimation
+	oaiReq, err := claude.ToOpenAI(req)
+	if err != nil {
+		writeClaudeError(w, http.StatusBadRequest, "invalid_request_error", "failed to convert request: "+err.Error())
+		return
+	}
+
+	inputTokens := estimateInputTokensClaude(oaiReq.Messages, req.System, req.Tools)
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]int{
+		"input_tokens": inputTokens,
+	})
+}
+
 func estimateInputTokensClaude(messages []openai.ChatMessage, system claude.SystemPrompt, tools []claude.Tool) int {
 	total := 0
 

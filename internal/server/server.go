@@ -99,6 +99,9 @@ func New(deps Deps) http.Handler {
 		r.Post("/v1/messages", h.claudeMessages)
 		r.Post("/v1/v1/messages", h.claudeMessages)
 		r.Post("/messages", h.claudeMessages)
+		// Claude Code count_tokens endpoint
+		r.Post("/v1/messages/count_tokens", h.claudeCountTokens)
+		r.Post("/messages/count_tokens", h.claudeCountTokens)
 	})
 
 	r.Group(func(r chi.Router) {
