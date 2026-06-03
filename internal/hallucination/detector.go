@@ -3,6 +3,7 @@
 package hallucination
 
 import (
+	"encoding/json"
 	"strings"
 
 	"github.com/keaume34/qwen2api/internal/openai"
@@ -103,12 +104,16 @@ func FilterDuplicates(calls []openai.ToolCall) []openai.ToolCall {
 	return filtered
 }
 
-// ValidateToolCall checks if a tool call is valid (non-empty name and arguments).
+// ValidateToolCall checks if a tool call is valid (non-empty name and valid JSON arguments).
 func ValidateToolCall(call openai.ToolCall) bool {
 	if call.Function.Name == "" {
 		return false
 	}
 	if call.Function.Arguments == "" || call.Function.Arguments == "null" {
+		return false
+	}
+	// Arguments must be valid JSON
+	if !json.Valid([]byte(call.Function.Arguments)) {
 		return false
 	}
 	return true

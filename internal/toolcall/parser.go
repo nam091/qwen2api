@@ -189,10 +189,17 @@ func parseBareJSON(text string) ([]openai.ToolCall, string) {
 	if len(matches) == 0 {
 		return nil, text
 	}
+	// Build set of character positions that are inside code fences
+	insideFence := buildFenceMask(text)
+
 	var calls []openai.ToolCall
 	var content strings.Builder
 	lastEnd := 0
 	for _, loc := range matches {
+		// Skip matches that are inside a code fence
+		if loc[0] < len(insideFence) && insideFence[loc[0]] {
+			continue
+		}
 		content.WriteString(text[lastEnd:loc[0]])
 		lastEnd = loc[1]
 		candidate := text[loc[0]:loc[1]]
@@ -204,6 +211,24 @@ func parseBareJSON(text string) ([]openai.ToolCall, string) {
 	}
 	content.WriteString(text[lastEnd:])
 	return calls, content.String()
+}
+
+// buildFenceMask returns a boolean slice where true means the position
+// is inside a code fence (between triple-backtick markers).
+func buildFenceMask(text string) []bool {
+	mask := make([]bool, len(text))
+	inFence := false
+	fenceChar := byte('`')
+	for i := 0; i < len(text); i++ {
+		if i+2 < len(text) && text[i] == fenceChar && text[i+1] == fenceChar && text[i+2] == fenceChar {
+			inFence = !inFence
+			mask[i] = inFence
+			i += 2
+			continue
+		}
+		mask[i] = inFence
+	}
+	return mask
 }
 
 // stripCodeFences removes markdown code fences that wrap the entire block.

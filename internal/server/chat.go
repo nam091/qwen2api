@@ -1253,8 +1253,8 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			(len(result.ToolCalls) == 0 && toolcall.SawToolMarker(accumulated))) {
 		if res, ok := toolcall.ResolveTruncatedToolCall(
 			ctx, accumulated, h.deps.Config.Features.MultiFormatToolParsing, cont,
-		); ok {
-			result = res // rơi xuống nhánh emit tool_calls bên dưới
+		); ok && len(res.ToolCalls) > 0 {
+			result = res
 		}
 	}
 

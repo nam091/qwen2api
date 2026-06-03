@@ -292,7 +292,17 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 
 	msgID := "msg_" + uuid.NewString()
 	if req.Stream {
-		h.streamClaudeResponse(r.Context(), w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing, inputTokensFallback)
+		// Build Continuer for truncation auto-continuation (only when tools present)
+		var cont toolcall.Continuer
+		if hasTools {
+			cont = &qwenContinuer{
+				client:  h.deps.Qwen,
+				token:   token.Value,
+				chatID:  upstreamReq.ChatID,
+				baseReq: upstreamReq,
+			}
+		}
+		h.streamClaudeResponse(r.Context(), w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing, inputTokensFallback, cont)
 	} else {
 		h.aggregateClaudeResponse(w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing, inputTokensFallback)
 	}
@@ -302,7 +312,7 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 
 // streamClaudeResponse reads raw Qwen SSE, applies thinking wrapping and tool
 // detection, and emits a well-formed Claude Messages SSE stream.
-func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool, inputTokensFallback int) {
+func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool, inputTokensFallback int, cont toolcall.Continuer) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
