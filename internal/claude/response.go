@@ -289,14 +289,15 @@ func (sc *StreamConverter) Convert(chunk openai.StreamChunk) []StreamEvent {
 		}
 
 		if stopReason != "" {
-			// Emit content_block_stop for text if it started
+			// Emit content_block_stop for text if it started (index 0)
 			if sc.textStarted {
 				events = append(events, StreamEvent{
 					Type:  "content_block_stop",
 					Index: intPtr(0),
 				})
 			}
-			// Emit content_block_stop for any tools that started
+			// Emit content_block_stop for tools that started (indices 1, 2, 3...)
+			// Tools are indexed after text (0), so they start at 1
 			for idx := range sc.toolsStarted {
 				events = append(events, StreamEvent{
 					Type:  "content_block_stop",

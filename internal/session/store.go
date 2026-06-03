@@ -182,6 +182,13 @@ func (s *Store) persistSession(sess *Session) {
 		return
 	}
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				if s.logger != nil {
+					s.logger.Error("persistSession panic recovered", "panic", r, "id", sess.ID)
+				}
+			}
+		}()
 		path := filepath.Join(s.dataDir, sess.ID+".json")
 		tmp := path + ".tmp"
 		data, err := json.MarshalIndent(sess, "", "  ")

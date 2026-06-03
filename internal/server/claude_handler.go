@@ -859,28 +859,15 @@ func estimateInputTokensOpenAI(messages []openai.ChatMessage, tools []openai.Too
 }
 
 // approxTokens estimates token count for a string as a rough 4 chars/token.
+// CJK and other multi-byte scripts count as ~2 tokens each; ASCII counts by
+// byte length / 4.
 func approxTokens(s string) int {
 	if s == "" {
 		return 0
 	}
-	tokens := 0
-	for _, r := range s {
-		if r >= 0x4E00 && r <= 0x9FFF || r >= 0x3400 && r <= 0x4DBF || r >= 0xF900 && r <= 0xFAFF {
-			tokens += 2 // CJK characters
-		} else if r <= 127 {
-			tokens += 1 // ASCII: ~4 chars per token
-			if tokens%4 != 0 {
-				// keep counting, will divide at end
-			}
-		} else {
-			tokens += 1 // Other non-ASCII
-		}
-	}
-	// Better approximation: count bytes then divide
-	// For mixed content, use byte-length based with CJK adjustment
 	cjkCount := 0
 	for _, r := range s {
-		if r >= 0x4E00 && r <= 0x9FFF || r >= 0x3400 && r <= 0x4DBF || r >= 0xF900 && r <= 0xFAFF {
+		if isCJKApprox(r) {
 			cjkCount++
 		}
 	}
@@ -895,10 +882,20 @@ func approxTokens(s string) int {
 	return result
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
-	}
-	return b
+// isCJKApprox returns true for CJK and related scripts that tokenize at ~2
+// tokens per character. Mirrors the ranges in tokencount.isCJK but kept local
+// to avoid an import cycle.
+func isCJKApprox(r rune) bool {
+	return (r >= 0x4E00 && r <= 0x9FFF) || // CJK Unified Ideographs
+		(r >= 0x3400 && r <= 0x4DBF) || // CJK Unified Ideographs Extension A
+		(r >= 0xF900 && r <= 0xFAFF) || // CJK Compatibility Ideographs
+		(r >= 0x20000 && r <= 0x2A6DF) || // CJK Unified Ideographs Extension B
+		(r >= 0x2A700 && r <= 0x2B73F) || // CJK Unified Ideographs Extension C
+		(r >= 0x2B740 && r <= 0x2B81F) || // CJK Unified Ideographs Extension D
+		(r >= 0x3040 && r <= 0x309F) || // Hiragana
+		(r >= 0x30A0 && r <= 0x30FF) || // Katakana
+		(r >= 0xAC00 && r <= 0xD7AF) || // Hangul Syllables
+		(r >= 0x1100 && r <= 0x11FF) || // Hangul Jamo
+		(r >= 0x3130 && r <= 0x318F) // Hangul Compatibility Jamo
 }
 

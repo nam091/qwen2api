@@ -79,7 +79,14 @@ func run() error {
 	}
 
 	// tokenHealthLoop runs unconditionally but checks Features.AutoTokenRefresh dynamically.
-	go tokenHealthLoop(logger, client, pool, &cfg)
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("tokenHealthLoop panic recovered", "panic", r)
+			}
+		}()
+		tokenHealthLoop(logger, client, pool, &cfg)
+	}()
 
 	var affinityStore *affinity.Store
 	if cfg.Features.SessionAffinity {
@@ -143,6 +150,14 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("HTTP server panic recovered", "panic", r)
+				if err, ok := r.(error); ok {
+					errCh <- err
+				}
+			}
+		}()
 		logger.Info("qwen2api listening", "addr", addr, "tokens", len(cfg.Tokens), "api_keys", len(cfg.APIKeys))
 		if err := httpServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err

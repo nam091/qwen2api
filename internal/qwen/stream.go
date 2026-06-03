@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"strings"
 )
 
@@ -61,6 +62,8 @@ func (r *StreamReader) Next() (StreamEvent, error) {
 		delta := &StreamDelta{}
 		if err := json.Unmarshal([]byte(data), delta); err != nil {
 			// Don't fail the whole stream on a single malformed chunk.
+			// Log it for debugging instead of silently dropping.
+			slog.Debug("malformed SSE chunk", "data", data, "err", err)
 			return StreamEvent{Raw: data}, nil
 		}
 		return StreamEvent{Delta: delta, Raw: data}, nil

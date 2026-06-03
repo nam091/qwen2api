@@ -84,6 +84,10 @@ func AutoCompact(msgs []openai.ChatMessage, maxTokens int, threshold float64, co
 		keepCount = 1
 	}
 
+	// Guard against slice bounds panic when keepCount exceeds nonSystemMsgs length
+	if keepCount > len(nonSystemMsgs) {
+		keepCount = len(nonSystemMsgs)
+	}
 	middleMsgs := nonSystemMsgs[:len(nonSystemMsgs)-keepCount]
 	recentMsgs := nonSystemMsgs[len(nonSystemMsgs)-keepCount:]
 

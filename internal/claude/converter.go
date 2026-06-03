@@ -3,6 +3,7 @@ package claude
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/keaume34/qwen2api/internal/openai"
 )
@@ -21,11 +22,13 @@ func ToOpenAI(req MessagesRequest) (openai.ChatRequest, error) {
 
 	// Convert Claude messages to OpenAI format
 	for _, msg := range req.Messages {
-		oaiMsg, err := convertMessage(msg)
+		oaiMsgs, err := convertMessage(msg)
 		if err != nil {
 			return openai.ChatRequest{}, err
 		}
-		messages = append(messages, oaiMsg)
+		// convertMessage returns a slice because a single Claude message with
+		// multiple tool_results maps to multiple OpenAI "tool" messages.
+		messages = append(messages, oaiMsgs...)
 	}
 
 	// Convert tools
@@ -62,13 +65,13 @@ func ToOpenAI(req MessagesRequest) (openai.ChatRequest, error) {
 	return oaiReq, nil
 }
 
-func convertMessage(msg Message) (openai.ChatMessage, error) {
+func convertMessage(msg Message) ([]openai.ChatMessage, error) {
 	// Simple text-only message
 	if len(msg.Content) == 1 && msg.Content[0].Type == "text" {
-		return openai.ChatMessage{
+		return []openai.ChatMessage{{
 			Role:    msg.Role,
 			Content: json.RawMessage(fmt.Sprintf(`"%s"`, escapeJSON(msg.Content[0].Text))),
-		}, nil
+		}}, nil
 	}
 
 	// Handle tool_use in assistant messages
@@ -97,23 +100,38 @@ func convertMessage(msg Message) (openai.ChatMessage, error) {
 			content = textParts[0]
 		}
 
-		return openai.ChatMessage{
+		return []openai.ChatMessage{{
 			Role:      "assistant",
 			Content:   json.RawMessage(fmt.Sprintf(`"%s"`, escapeJSON(content))),
 			ToolCalls: toolCalls,
-		}, nil
+		}}, nil
 	}
 
-	// Handle tool_result in user messages
+	// Handle tool_result in user messages.
+	// OpenAI format requires each tool_result to be a separate "tool" message.
+	// A single Claude user message can contain multiple tool_result blocks.
 	if msg.Role == "user" {
+		var toolResults []openai.ChatMessage
+		var textParts []string
 		for _, part := range msg.Content {
 			if part.Type == "tool_result" {
-				return openai.ChatMessage{
+				toolResults = append(toolResults, openai.ChatMessage{
 					Role:       "tool",
 					Content:    json.RawMessage(fmt.Sprintf(`"%s"`, escapeJSON(string(part.Content)))),
 					ToolCallID: part.ToolUseID,
-				}, nil
+				})
+			} else if part.Type == "text" {
+				textParts = append(textParts, part.Text)
 			}
+		}
+		if len(toolResults) > 0 {
+			return toolResults, nil
+		}
+		if len(textParts) > 0 {
+			return []openai.ChatMessage{{
+				Role:    "user",
+				Content: json.RawMessage(fmt.Sprintf(`"%s"`, escapeJSON(strings.Join(textParts, "\n")))),
+			}}, nil
 		}
 	}
 
@@ -140,13 +158,13 @@ func convertMessage(msg Message) (openai.ChatMessage, error) {
 
 	contentJSON, err := json.Marshal(parts)
 	if err != nil {
-		return openai.ChatMessage{}, err
+		return nil, err
 	}
 
-	return openai.ChatMessage{
+	return []openai.ChatMessage{{
 		Role:    msg.Role,
 		Content: json.RawMessage(contentJSON),
-	}, nil
+	}}, nil
 }
 
 func escapeJSON(s string) string {
