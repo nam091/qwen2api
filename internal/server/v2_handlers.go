@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"sort"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -478,8 +477,7 @@ setInterval(refresh, 5000);
 </body>
 </html>`
 
-// Ensure strings is imported (used in dashboardHTML escaping if added later).
-var _ = strings.Builder{}
+
 
 func (h *handlers) testModel(w http.ResponseWriter, r *http.Request) {
 	var body struct {

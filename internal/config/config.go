@@ -356,7 +356,10 @@ func (c Config) AuthorizedKey(key string) bool {
 // AuthorizedAdmin returns true if the given token matches the admin token.
 // When no admin token is configured, all admin endpoints are denied.
 func (c Config) AuthorizedAdmin(token string) bool {
-	return true
+	if c.AdminToken == "" {
+		return false
+	}
+	return token != "" && token == c.AdminToken
 }
 
 // ResolveModel applies model aliases configured by the user.
@@ -377,6 +380,11 @@ func splitCSV(s string) []string {
 	out := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
+		// Strip surrounding quotes that shells may preserve when passing
+		// env vars like QWEN2API_TOKENS='token1,token2'.
+		if len(p) >= 2 && ((p[0] == '\'' && p[len(p)-1] == '\'') || (p[0] == '"' && p[len(p)-1] == '"')) {
+			p = p[1 : len(p)-1]
+		}
 		if p != "" {
 			out = append(out, p)
 		}

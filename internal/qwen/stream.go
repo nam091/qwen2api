@@ -4,10 +4,40 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"strings"
+	"time"
 )
+
+// DefaultStreamReadTimeout is the maximum time to wait for data between
+// SSE events. If the upstream stalls (keeps TCP open but sends nothing),
+// this prevents goroutines from hanging indefinitely.
+const DefaultStreamReadTimeout = 90 * time.Second
+
+// deadlineReader wraps an io.Reader and sets a per-read deadline on the
+// underlying net.Conn (if available). This ensures that stalled streams
+// produce a timeout error instead of blocking forever.
+type deadlineReader struct {
+	r       io.Reader
+	timeout time.Duration
+}
+
+func (d *deadlineReader) Read(p []byte) (int, error) {
+	if conn, ok := d.r.(interface{ SetReadDeadline(time.Time) error }); ok {
+		_ = conn.SetReadDeadline(time.Now().Add(d.timeout))
+	}
+	n, err := d.r.Read(p)
+	if err != nil {
+		var netErr net.Error
+		if errors.As(err, &netErr) && netErr.Timeout() {
+			return n, fmt.Errorf("stream read timeout after %s: %w", d.timeout, err)
+		}
+	}
+	return n, err
+}
 
 // StreamEvent is a parsed line from upstream SSE.
 type StreamEvent struct {
@@ -30,8 +60,12 @@ type StreamReader struct {
 // The buffer ceiling is intentionally large (32 MiB) so a single fat
 // SSE event — e.g. a model emitting tens of KB of code in one chunk —
 // can't trigger bufio.ErrTooLong and abruptly kill the stream.
+//
+// A per-chunk read deadline is applied automatically so stalled upstream
+// connections produce a timeout error instead of blocking forever.
 func NewStreamReader(r io.Reader) *StreamReader {
-	scanner := bufio.NewScanner(r)
+	dr := &deadlineReader{r: r, timeout: DefaultStreamReadTimeout}
+	scanner := bufio.NewScanner(dr)
 	scanner.Buffer(make([]byte, 0, 64*1024), 32*1024*1024)
 	return &StreamReader{s: scanner}
 }

@@ -29,22 +29,13 @@ func putStreamBuf(buf *bytes.Buffer) {
 }
 
 // marshalStreamChunk efficiently marshals a stream chunk using pooled buffers.
+// The returned byte slice is a copy so the pooled buffer can be reused immediately.
 func marshalStreamChunk(v any) ([]byte, error) {
-	buf := getStreamBuf()
-	defer putStreamBuf(buf)
-
-	enc := json.NewEncoder(buf)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(v); err != nil {
+	// json.Marshal is faster than Encoder for single-shot serialization
+	// in Go 1.23+ and avoids the per-call Encoder allocation.
+	b, err := json.Marshal(v)
+	if err != nil {
 		return nil, err
 	}
-	// Encode appends newline, trim it for SSE format
-	b := buf.Bytes()
-	if len(b) > 0 && b[len(b)-1] == '\n' {
-		b = b[:len(b)-1]
-	}
-	// Copy since buffer will be reused
-	result := make([]byte, len(b))
-	copy(result, b)
-	return result, nil
+	return b, nil
 }

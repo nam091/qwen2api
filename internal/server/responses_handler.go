@@ -106,7 +106,8 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 	}
 
 	chatReq.Model = h.deps.Config.ResolveModel(chatReq.Model)
-	upstreamReq := buildQwenRequestFull(chatReq, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
+	collapsedText := collapseMessages(chatReq.Messages)
+	upstreamReq := buildQwenRequestFullCollapsed(chatReq, collapsedText, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 
 	// Detect inline `data:` image URIs so we can upload them to Qwen OSS on
 	// the first attempt (once a token is in hand).

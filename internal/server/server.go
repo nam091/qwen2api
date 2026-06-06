@@ -137,18 +137,18 @@ func New(deps Deps) http.Handler {
 	return r
 }
 
+// allowedHeaders is the fixed whitelist of headers accepted in CORS preflight.
+// Reflecting arbitrary request headers is a security risk and prevents
+// preflight caching because the response varies per request.
+const allowedHeaders = "Authorization, Content-Type, Accept, X-API-Key, X-Request-Id, Anthropic-Version, Anthropic-Beta, Anthropic-Dangerous-Direct-Browser-Access"
+
 func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS, PUT")
-		
-		// Dynamically allow any headers requested by the client
-		if reqHeaders := r.Header.Get("Access-Control-Request-Headers"); reqHeaders != "" {
-			w.Header().Set("Access-Control-Allow-Headers", reqHeaders)
-		} else {
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Accept, X-API-Key, Anthropic-Version, Anthropic-Beta, Anthropic-Dangerous-Direct-Browser-Access")
-		}
-		
+		w.Header().Set("Access-Control-Allow-Headers", allowedHeaders)
+		w.Header().Set("Access-Control-Max-Age", "86400") // Cache preflight for 24h
+
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

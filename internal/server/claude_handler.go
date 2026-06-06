@@ -84,8 +84,9 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Build upstream request
-	upstreamReq := buildQwenRequestFull(oaiReq, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
+	// Build upstream request with pre-computed collapsed text
+	collapsedText := collapseMessages(oaiReq.Messages)
+	upstreamReq := buildQwenRequestFullCollapsed(oaiReq, collapsedText, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 
 	// Detect inline `data:` image URIs (Claude clients may attach base64
 	// images via the Anthropic image content block, which ToOpenAI maps to a

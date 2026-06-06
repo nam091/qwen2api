@@ -329,7 +329,9 @@ func (c *Client) doWithFallbackClient(ctx context.Context, req *http.Request, cl
 		return resp, err
 	}
 
-	bodyBytes, _ := io.ReadAll(resp.Body)
+	// Limit anti-bot body read to 1 MiB — these responses are typically small
+	// HTML/JSON error pages. Unbounded reads waste memory on large upstream responses.
+	bodyBytes, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	_ = resp.Body.Close()
 	bodyStr := string(bodyBytes)
 

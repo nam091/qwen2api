@@ -89,7 +89,11 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	upstreamReq := buildQwenRequestFull(req, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
+	// Pre-compute collapsed messages once and reuse across cache key lookups
+	// and the upstream request builder to avoid redundant O(n*m) string building.
+	collapsedText := collapseMessages(req.Messages)
+
+	upstreamReq := buildQwenRequestFullCollapsed(req, collapsedText, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 
 	// If session has a summary and enough history, prepend it to the collapsed text
 	if sess != nil && sess.Summary != "" && len(req.Messages) > h.deps.Config.Session.RollingHistoryK {
@@ -170,11 +174,11 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	// the previous turn that hashed that turn's FULL message slice.
 	var lookupContinuityKey string
 	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil {
-		lookupContinuityKey = lookupConvKey(upstreamReq.Model+":conv", req.Messages)
+		lookupContinuityKey = lookupConvKeyCached(upstreamReq.Model+":conv", req.Messages, collapsedText)
 	}
 	var storeContinuityKey string
 	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil && len(req.Messages) > 0 {
-		storeContinuityKey = promptcache.Key(upstreamReq.Model+":conv", collapseMessages(req.Messages))
+		storeContinuityKey = promptcache.Key(upstreamReq.Model+":conv", collapsedText)
 	}
 
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
@@ -300,6 +304,15 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				// iteration. Bump retries so dashboards reflect it.
 				retries++
 				if attempt >= maxAttempts {
+					// Cap extra retries to prevent unbounded loops when
+					// upstream persistently returns empty streams for reused chat_ids.
+					const maxExtraRetries = 3
+					extraSoFar := maxAttempts - h.deps.Config.Retry.MaxAttempts
+					if extraSoFar >= maxExtraRetries {
+						h.deps.Logger.Error("cache reuse retry limit exhausted; giving up",
+							"chat_id", chatID, "model", upstreamReq.Model, "attempts", attempt)
+						break
+					}
 					maxAttempts = attempt + 1
 				}
 				continue
@@ -504,6 +517,12 @@ func buildQwenRequestWithOptions(req openai.ChatRequest, multimodalEnabled bool)
 
 // buildQwenRequestFull is the canonical builder; thinkingMode is "auto"/"on"/"off".
 func buildQwenRequestFull(req openai.ChatRequest, multimodalEnabled bool, thinkingMode string) qwen.CompletionRequest {
+	return buildQwenRequestFullCollapsed(req, collapseMessages(req.Messages), multimodalEnabled, thinkingMode)
+}
+
+// buildQwenRequestFullCollapsed is like buildQwenRequestFull but accepts a
+// pre-computed collapsed message string to avoid redundant collapseMessages calls.
+func buildQwenRequestFullCollapsed(req openai.ChatRequest, collapsed string, multimodalEnabled bool, thinkingMode string) qwen.CompletionRequest {
 	chatType := chatTypeFromModel(req.Model)
 	thinkingEnabled := false
 	switch strings.ToLower(strings.TrimSpace(thinkingMode)) {
@@ -518,13 +537,6 @@ func buildQwenRequestFull(req openai.ChatRequest, multimodalEnabled bool, thinki
 			thinkingEnabled = true
 		}
 	}
-
-	// Upstream chat.qwen.ai only accepts a single user-role message per
-	// request (it is the web-client API, not a multi-turn API). When the
-	// caller sends multiple messages or non-user roles (system/assistant),
-	// collapse the whole history into one user message with role-prefixed
-	// content so the conversation context is preserved.
-	collapsed := collapseMessages(req.Messages)
 
 	if len(req.Tools) > 0 {
 		toolPrompt := toolcall.FormatToolsPrompt(req.Tools)
@@ -680,6 +692,33 @@ func lookupConvKey(model string, msgs []openai.ChatMessage) string {
 	return promptcache.Key(model, collapseMessages(prefix))
 }
 
+// lookupConvKeyCached is like lookupConvKey but uses a pre-computed collapsed
+// string for the full message slice. When the trailing [assistant, user] pattern
+// matches, it rebuilds only the prefix portion. For the common case where the
+// full collapsed text IS the prefix (single user message), this avoids a second
+// collapseMessages call entirely.
+func lookupConvKeyCached(model string, msgs []openai.ChatMessage, fullCollapsed string) string {
+	if len(msgs) < 2 {
+		return ""
+	}
+	last := strings.ToLower(msgs[len(msgs)-1].Role)
+	prev := strings.ToLower(msgs[len(msgs)-2].Role)
+	if last != "user" || prev != "assistant" {
+		return ""
+	}
+	prefix := msgs[:len(msgs)-2]
+	if len(prefix) == 0 {
+		return ""
+	}
+	// If dropping the last 2 messages leaves the same set as what produced
+	// fullCollapsed (i.e. the trailing assistant+user contributed nothing
+	// meaningful), reuse it. Otherwise fall back to recomputing.
+	if len(prefix) == len(msgs)-2 && len(msgs) == 1 {
+		return promptcache.Key(model, fullCollapsed)
+	}
+	return promptcache.Key(model, collapseMessages(prefix))
+}
+
 func chatTypeFromModel(model string) string {
 	switch {
 	case strings.Contains(model, "search"):
@@ -769,7 +808,8 @@ func (h *handlers) storeSessionAndMaybeSummarize(hash string, reqMsgs []openai.C
 					h.deps.Logger.Error("rolling summary panic recovered", "panic", r)
 				}
 			}()
-			ctx := context.Background()
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			defer cancel()
 			newSummary, err := session.GenerateSummary(ctx, h.deps.Qwen, token, summaryModel, msgs, currentSummary)
 			if err != nil {
 				h.deps.Logger.Warn("rolling summary failed", "hash", hash, "err", err)
@@ -1067,13 +1107,21 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 	}
 
 	// Emit usage in final chunk per OpenAI streaming convention.
-	outputTokens := outputLen / 4
-	if outputTokens == 0 && outputLen > 0 {
-		outputTokens = 1
-	}
-	reasoningTokens := reasoningLen / 4
-	if reasoningTokens == 0 && reasoningLen > 0 {
-		reasoningTokens = 1
+	// Use TokenCounter for language-aware estimation when available,
+	// falling back to byte/4 for backward compatibility.
+	var outputTokens, reasoningTokens int
+	if h.deps.TokenCounter != nil {
+		outputTokens = h.deps.TokenCounter.EstimateFromBytes(outputLen)
+		reasoningTokens = h.deps.TokenCounter.EstimateFromBytes(reasoningLen)
+	} else {
+		outputTokens = outputLen / 4
+		if outputTokens == 0 && outputLen > 0 {
+			outputTokens = 1
+		}
+		reasoningTokens = reasoningLen / 4
+		if reasoningTokens == 0 && reasoningLen > 0 {
+			reasoningTokens = 1
+		}
 	}
 	// completion_tokens must include reasoning tokens — they are part of the output.
 	totalCompletion := outputTokens + reasoningTokens
@@ -1398,9 +1446,14 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			finish = "length"
 		}
 		outputTokens := approxTokens(accumulated)
-		reasoningTokens := reasoningLen / 4
-		if reasoningTokens == 0 && reasoningLen > 0 {
-			reasoningTokens = 1
+		var reasoningTokens int
+		if h.deps.TokenCounter != nil {
+			reasoningTokens = h.deps.TokenCounter.EstimateFromBytes(reasoningLen)
+		} else {
+			reasoningTokens = reasoningLen / 4
+			if reasoningTokens == 0 && reasoningLen > 0 {
+				reasoningTokens = 1
+			}
 		}
 		totalCompletion := outputTokens + reasoningTokens
 		promptTokens := inputTokensFallback
@@ -1541,29 +1594,47 @@ func (h *handlers) processFileCache(apiKey string, msgs []openai.ChatMessage) {
 		if text == "" {
 			continue
 		}
-		modifiedText := fileBlockRe.ReplaceAllStringFunc(text, func(match string) string {
-			submatches := fileBlockRe.FindStringSubmatch(match)
-			if len(submatches) < 3 {
-				return match
+		// Use FindAllStringSubmatchIndex to get all matches with their
+		// positions and captured groups in a single pass, avoiding the
+		// double-parse that ReplaceAllStringFunc + FindStringSubmatch caused.
+		indices := fileBlockRe.FindAllStringSubmatchIndex(text, -1)
+		if len(indices) == 0 {
+			continue
+		}
+		var b strings.Builder
+		lastEnd := 0
+		modified := false
+		for _, loc := range indices {
+			// loc layout: [fullStart, fullEnd, group1Start, group1End, group2Start, group2End]
+			if len(loc) < 6 {
+				continue
 			}
-			filePath := submatches[1]
-			content := submatches[2]
+			b.WriteString(text[lastEnd:loc[0]])
+			filePath := text[loc[2]:loc[3]]
+			content := text[loc[4]:loc[5]]
 			if filecache.IsUnchangedHint(content) {
 				if cached, ok := h.deps.FileCache.Get(apiKey, filePath); ok {
-					return fmt.Sprintf(`<file path="%s">%s</file>`, filePath, cached)
+					fmt.Fprintf(&b, `<file path="%s">%s</file>`, filePath, cached)
+					modified = true
+				} else {
+					b.WriteString(text[loc[0]:loc[1]])
 				}
 			} else {
 				h.deps.FileCache.Put(apiKey, filePath, content)
+				b.WriteString(text[loc[0]:loc[1]])
 			}
-			return match
-		})
-		if modifiedText != text {
-			var buf bytes.Buffer
-			enc := json.NewEncoder(&buf)
-			enc.SetEscapeHTML(false)
-			if err := enc.Encode(modifiedText); err == nil {
-				msgs[i].Content = bytes.TrimSpace(buf.Bytes())
-			}
+			lastEnd = loc[1]
+		}
+		if !modified {
+			continue
+		}
+		b.WriteString(text[lastEnd:])
+		modifiedText := b.String()
+		var buf bytes.Buffer
+		enc := json.NewEncoder(&buf)
+		enc.SetEscapeHTML(false)
+		if err := enc.Encode(modifiedText); err == nil {
+			msgs[i].Content = bytes.TrimSpace(buf.Bytes())
 		}
 	}
 }
