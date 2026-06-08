@@ -1,9 +1,12 @@
 package server
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
 	"strings"
 
+	"github.com/keaume34/qwen2api/internal/database"
 	"github.com/keaume34/qwen2api/internal/openai"
 )
 
@@ -94,4 +97,68 @@ func (o *ClaudeCodeOptimizer) GetOptimizationStats(original, optimized string) m
 		"saved_tokens":     savedTokens,
 		"saved_percent":    savedPercent,
 	}
+}
+
+// GenerateConversationID generates a deterministic conversation ID.
+// For Claude Code: uses IP + User-Agent (session-based)
+// For other clients: uses User-Agent + first message
+func GenerateConversationID(userAgent, firstUserMessage, clientIP string, isClaudeCode bool) string {
+	hash := sha256.New()
+	if isClaudeCode {
+		// For Claude Code: use IP + User-Agent for session persistence
+		hash.Write([]byte(clientIP))
+		hash.Write([]byte(userAgent))
+	} else {
+		// For other clients: use User-Agent + first message
+		hash.Write([]byte(userAgent))
+		hash.Write([]byte(firstUserMessage))
+	}
+	return hex.EncodeToString(hash.Sum(nil))[:16] // Use first 16 chars for readability
+}
+
+// FindNewMessages finds messages that are not in stored history.
+// It compares from the end of stored history to find the delta.
+func FindNewMessages(requestMessages []openai.ChatMessage, storedMessages []*database.Message) []openai.ChatMessage {
+	if len(storedMessages) == 0 {
+		return requestMessages
+	}
+
+	// Convert stored messages to comparable format
+	storedTexts := make([]string, len(storedMessages))
+	for i, m := range storedMessages {
+		storedTexts[i] = m.Role + ":" + m.Content
+	}
+
+	// Find the last stored message in request messages
+	lastStoredIdx := -1
+	for i := len(requestMessages) - 1; i >= 0; i-- {
+		reqText := requestMessages[i].Role + ":" + requestMessages[i].Text()
+		// Check if this message matches the last stored message
+		if reqText == storedTexts[len(storedTexts)-1] {
+			lastStoredIdx = i
+			break
+		}
+	}
+
+	// If we found the last stored message, return everything after it
+	if lastStoredIdx >= 0 && lastStoredIdx < len(requestMessages)-1 {
+		return requestMessages[lastStoredIdx+1:]
+	}
+
+	// If we couldn't find the match, try matching by content only (more flexible)
+	for i := len(requestMessages) - 1; i >= 0; i-- {
+		reqContent := requestMessages[i].Text()
+		storedContent := storedMessages[len(storedMessages)-1].Content
+		if reqContent == storedContent && requestMessages[i].Role == storedMessages[len(storedMessages)-1].Role {
+			if i < len(requestMessages)-1 {
+				return requestMessages[i+1:]
+			}
+		}
+	}
+
+	// Fallback: return last user message or last message
+	if len(requestMessages) > 0 {
+		return requestMessages[len(requestMessages)-1:]
+	}
+	return requestMessages
 }

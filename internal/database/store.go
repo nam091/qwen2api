@@ -41,9 +41,14 @@ func NewStore(db *DB, logger *slog.Logger) *Store {
 	}
 }
 
-// CreateConversation creates a new conversation and returns it.
+// CreateConversation creates a new conversation with a random UUID and returns it.
 func (s *Store) CreateConversation(title, model string) (*Conversation, error) {
 	id := uuid.NewString()
+	return s.CreateConversationWithID(id, title, model)
+}
+
+// CreateConversationWithID creates a new conversation with a specific ID and returns it.
+func (s *Store) CreateConversationWithID(id, title, model string) (*Conversation, error) {
 	now := time.Now()
 
 	query := `INSERT INTO conversations (id, title, model, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`

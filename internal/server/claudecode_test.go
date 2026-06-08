@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"testing"
 
+	"github.com/keaume34/qwen2api/internal/database"
 	"github.com/keaume34/qwen2api/internal/openai"
 )
 
@@ -205,4 +206,91 @@ func containsSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestGenerateConversationID(t *testing.T) {
+	// Same inputs should produce same ID (Claude Code)
+	id1 := GenerateConversationID("claude-code/1.0", "Hello", "192.168.1.1", true)
+	id2 := GenerateConversationID("claude-code/1.0", "Hello", "192.168.1.1", true)
+	if id1 != id2 {
+		t.Errorf("expected same ID for same inputs, got %s and %s", id1, id2)
+	}
+
+	// Different IP should produce different ID (Claude Code)
+	id3 := GenerateConversationID("claude-code/1.0", "Hello", "192.168.1.2", true)
+	if id1 == id3 {
+		t.Error("expected different ID for different IP")
+	}
+
+	// Same IP, different message should produce same ID (Claude Code - session based)
+	id4 := GenerateConversationID("claude-code/1.0", "World", "192.168.1.1", true)
+	if id1 != id4 {
+		t.Error("expected same ID for same IP (Claude Code session)")
+	}
+
+	// Non-Claude Code: different message should produce different ID
+	id5 := GenerateConversationID("chrome/1.0", "Hello", "192.168.1.1", false)
+	id6 := GenerateConversationID("chrome/1.0", "World", "192.168.1.1", false)
+	if id5 == id6 {
+		t.Error("expected different ID for different messages (non-Claude Code)")
+	}
+
+	// ID should be 16 chars
+	if len(id1) != 16 {
+		t.Errorf("expected ID length 16, got %d", len(id1))
+	}
+}
+
+func TestFindNewMessages_NoStoredMessages(t *testing.T) {
+	requestMessages := []openai.ChatMessage{
+		{Role: "user", Content: json.RawMessage(`"Hello"`)},
+		{Role: "assistant", Content: json.RawMessage(`"Hi"`)},
+	}
+
+	result := FindNewMessages(requestMessages, nil)
+	if len(result) != 2 {
+		t.Errorf("expected 2 messages, got %d", len(result))
+	}
+}
+
+func TestFindNewMessages_WithStoredMessages(t *testing.T) {
+	requestMessages := []openai.ChatMessage{
+		{Role: "user", Content: json.RawMessage(`"Hello"`)},
+		{Role: "assistant", Content: json.RawMessage(`"Hi"`)},
+		{Role: "user", Content: json.RawMessage(`"How are you?"`)},
+	}
+
+	storedMessages := []*database.Message{
+		{Role: "user", Content: "Hello"},
+		{Role: "assistant", Content: "Hi"},
+	}
+
+	result := FindNewMessages(requestMessages, storedMessages)
+	if len(result) != 1 {
+		t.Errorf("expected 1 new message, got %d", len(result))
+	}
+	if result[0].Text() != "How are you?" {
+		t.Errorf("expected 'How are you?', got '%s'", result[0].Text())
+	}
+}
+
+func TestFindNewMessages_ToolOutput(t *testing.T) {
+	requestMessages := []openai.ChatMessage{
+		{Role: "user", Content: json.RawMessage(`"Read file"`)},
+		{Role: "assistant", Content: json.RawMessage(`"Reading..."`)},
+		{Role: "tool", Content: json.RawMessage(`"file content"`)},
+	}
+
+	storedMessages := []*database.Message{
+		{Role: "user", Content: "Read file"},
+		{Role: "assistant", Content: "Reading..."},
+	}
+
+	result := FindNewMessages(requestMessages, storedMessages)
+	if len(result) != 1 {
+		t.Errorf("expected 1 new message, got %d", len(result))
+	}
+	if result[0].Role != "tool" {
+		t.Errorf("expected tool role, got %s", result[0].Role)
+	}
 }
