@@ -45,6 +45,13 @@ type FeatureToggles struct {
 	BrowserEngineFallback  bool `json:"browser_engine_fallback"`
 	SessionPersistence     bool `json:"session_persistence"`
 	RollingSummary         bool `json:"rolling_summary"`
+	// ConversationMemory enables persistent conversation storage using a database.
+	// When enabled, clients can use conversation_id to maintain conversation history.
+	ConversationMemory bool `json:"conversation_memory"`
+	// ClaudeCodeOptimization enables smart message extraction for Claude Code.
+	// When enabled, only new content (tool outputs, command outputs, user queries)
+	// is sent to upstream, reducing token usage by 50-80%.
+	ClaudeCodeOptimization bool `json:"claude_code_optimization"`
 	// ThinkingMode controls whether upstream thinking is enabled.
 	// Values: "auto" (default — based on model name / client flag),
 	// "on" (force enable), "off" (force disable).
@@ -102,6 +109,18 @@ type ModelConfig struct {
 	CostPerOutputToken float64 `json:"cost_per_output_token,omitempty"`
 }
 
+// DatabaseConfig configures the database for conversation memory.
+type DatabaseConfig struct {
+	// Type of database: "sqlite" or "postgres" (sqlite recommended for most use cases)
+	Type string `json:"type"`
+	// Path for SQLite database file (e.g., "./data/qwen2api.db")
+	Path string `json:"path"`
+	// URL for PostgreSQL connection (e.g., "postgres://user:pass@localhost/dbname")
+	URL string `json:"url"`
+	// MaxConns sets the maximum number of open database connections
+	MaxConns int `json:"max_conns"`
+}
+
 // Config holds the resolved runtime configuration.
 type Config struct {
 	Port            int      `json:"port"`
@@ -129,6 +148,7 @@ type Config struct {
 	Logging      LoggingConfig      `json:"logging"`
 	TokenRefresh TokenRefreshConfig `json:"token_refresh"`
 	Session      SessionConfig      `json:"session"`
+	Database     DatabaseConfig     `json:"database"`
 
 	// Model-specific configurations (optional overrides).
 	ModelConfigs []ModelConfig `json:"model_configs,omitempty"`
@@ -160,6 +180,8 @@ func Default() Config {
 			BrowserEngineFallback:  false,
 			Tunnel:                 true,
 			ThinkingMode:           "off",
+			ConversationMemory:     false,
+			ClaudeCodeOptimization: false,
 		},
 		Cache: CacheConfig{
 			MaxEntries: 256,
@@ -187,6 +209,11 @@ func Default() Config {
 			DataDir:             "",
 			ContextWindowTokens: 131072,
 			CompactThreshold:    0.8,
+		},
+		Database: DatabaseConfig{
+			Type:     "sqlite",
+			Path:     "./data/qwen2api.db",
+			MaxConns: 10,
 		},
 		ModelAliases: map[string]string{
 			// qwen3.7-plus: upstream has 3.7-Plus-Preview under internal ID.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/keaume34/qwen2api/internal/affinity"
 	"github.com/keaume34/qwen2api/internal/config"
+	"github.com/keaume34/qwen2api/internal/database"
 	"github.com/keaume34/qwen2api/internal/filecache"
 	"github.com/keaume34/qwen2api/internal/metrics"
 	"github.com/keaume34/qwen2api/internal/ossupload"
@@ -43,6 +44,9 @@ type Deps struct {
 		Status() (running bool, url string, port int)
 	}
 	ShutdownCh chan struct{}
+
+	// Conversation memory
+	Database *database.Store
 }
 
 // New returns the configured http.Handler.
@@ -102,6 +106,14 @@ func New(deps Deps) http.Handler {
 		// Claude Code count_tokens endpoint
 		r.Post("/v1/messages/count_tokens", h.claudeCountTokens)
 		r.Post("/messages/count_tokens", h.claudeCountTokens)
+
+		// Conversation memory endpoints
+		r.Post("/v1/conversations", h.createConversation)
+		r.Get("/v1/conversations", h.listConversations)
+		r.Get("/v1/conversations/{id}", h.getConversation)
+		r.Put("/v1/conversations/{id}", h.updateConversation)
+		r.Delete("/v1/conversations/{id}", h.deleteConversation)
+		r.Get("/v1/conversations/{id}/messages", h.getConversationMessages)
 	})
 
 	r.Group(func(r chi.Router) {

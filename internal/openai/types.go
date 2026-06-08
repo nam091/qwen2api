@@ -16,6 +16,8 @@ type ChatRequest struct {
 	ToolChoice  any           `json:"tool_choice,omitempty"`
 	// Qwen extensions accepted but optional.
 	EnableThinking *bool `json:"enable_thinking,omitempty"`
+	// Conversation memory: explicit conversation ID for persistent conversations.
+	ConversationID string `json:"conversation_id,omitempty"`
 }
 
 // ChatMessage allows both plain-string and array (multimodal) content.

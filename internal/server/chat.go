@@ -48,6 +48,88 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	apiKey := bearerOrQuery(r)
 
+	// Conversation memory: if conversation_id provided, load history and append new messages
+	var conversationID string
+	if req.ConversationID != "" && h.deps.Database != nil && h.deps.Config.Features.ConversationMemory {
+		conversationID = req.ConversationID
+
+		// Check if conversation exists
+		exists, err := h.deps.Database.ConversationExists(conversationID)
+		if err != nil {
+			h.deps.Logger.Error("check conversation failed", "id", conversationID, "err", err)
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to check conversation")
+			return
+		}
+		if !exists {
+			writeError(w, http.StatusNotFound, "not_found", "conversation not found: "+conversationID)
+			return
+		}
+
+		// Load conversation history
+		history, err := h.deps.Database.GetMessages(conversationID)
+		if err != nil {
+			h.deps.Logger.Error("load conversation history failed", "id", conversationID, "err", err)
+			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load conversation history")
+			return
+		}
+
+		// Convert database messages to OpenAI format and prepend to request messages
+		// The client's new messages are at the end of req.Messages
+		// We need to prepend the history before the new messages
+		var historyMessages []openai.ChatMessage
+		for _, msg := range history {
+			contentBytes, _ := json.Marshal(msg.Content)
+			historyMessages = append(historyMessages, openai.ChatMessage{
+				Role:    msg.Role,
+				Content: contentBytes,
+			})
+		}
+
+		// Prepend history to request messages
+		req.Messages = append(historyMessages, req.Messages...)
+
+		h.deps.Logger.Info("loaded conversation history",
+			"conversation_id", conversationID,
+			"history_messages", len(history),
+			"total_messages", len(req.Messages),
+		)
+	}
+
+	// Claude Code optimization: extract only new content for Claude Code requests
+	clientType := DetectClient(r)
+	var claudeCodeOptimizer *ClaudeCodeOptimizer
+	if h.deps.Config.Features.ClaudeCodeOptimization && clientType == ClientClaudeCode {
+		claudeCodeOptimizer = NewClaudeCodeOptimizer(true)
+
+		// If we have a conversation_id, extract only new content
+		if conversationID != "" {
+			originalMessages := req.Messages
+			extractedContent := claudeCodeOptimizer.ExtractNewContent(originalMessages)
+
+			// Create a single user message with extracted content
+			contentBytes, _ := json.Marshal(extractedContent)
+			req.Messages = []openai.ChatMessage{
+				{
+					Role:    "user",
+					Content: contentBytes,
+				},
+			}
+
+			// Log optimization stats
+			stats := claudeCodeOptimizer.GetOptimizationStats(
+				collapseMessages(originalMessages),
+				extractedContent,
+			)
+			h.deps.Logger.Info("Claude Code optimization applied",
+				"conversation_id", conversationID,
+				"original_messages", len(originalMessages),
+				"extracted_content_len", len(extractedContent),
+				"saved_tokens", stats["saved_tokens"],
+				"saved_percent", stats["saved_percent"],
+			)
+		}
+	}
+
 	// File Cache (Phase 1 features)
 	h.processFileCache(apiKey, req.Messages)
 
@@ -370,6 +452,12 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				baseReq: upstreamReq,
 			}
 		}
+		// Add Claude Code optimization headers for streaming
+		if claudeCodeOptimizer != nil && conversationID != "" {
+			w.Header().Set("X-Conversation-ID", conversationID)
+			w.Header().Set("X-Optimization-Applied", "true")
+		}
+
 		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools, inputTokensFallback, cont)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 		h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
@@ -378,6 +466,22 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		if sess != nil && sessionHash != "" {
 			h.storeSessionAndMaybeSummarize(sessionHash, req.Messages, "", token.Value)
 		}
+
+		// Conversation memory: save user messages to database
+		if conversationID != "" && h.deps.Database != nil && h.deps.Config.Features.ConversationMemory {
+			// Save the last user message (the new one from this request)
+			for i := len(req.Messages) - 1; i >= 0; i-- {
+				if req.Messages[i].Role == "user" {
+					_, err := h.deps.Database.AddMessage(conversationID, "user", req.Messages[i].Text())
+					if err != nil {
+						h.deps.Logger.Error("save user message to conversation failed",
+							"conversation_id", conversationID, "err", err)
+					}
+					break
+				}
+			}
+		}
+
 		return
 	}
 
@@ -417,9 +521,39 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Add Claude Code optimization headers
+	if claudeCodeOptimizer != nil && conversationID != "" {
+		w.Header().Set("X-Conversation-ID", conversationID)
+		w.Header().Set("X-Optimization-Applied", "true")
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 	h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 	h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
+
+	// Conversation memory: save messages to database
+	if conversationID != "" && h.deps.Database != nil && h.deps.Config.Features.ConversationMemory {
+		// Save the last user message
+		for i := len(req.Messages) - 1; i >= 0; i-- {
+			if req.Messages[i].Role == "user" {
+				_, err := h.deps.Database.AddMessage(conversationID, "user", req.Messages[i].Text())
+				if err != nil {
+					h.deps.Logger.Error("save user message to conversation failed",
+						"conversation_id", conversationID, "err", err)
+				}
+				break
+			}
+		}
+
+		// Save the assistant response
+		if fullContent != "" {
+			_, err := h.deps.Database.AddMessage(conversationID, "assistant", fullContent)
+			if err != nil {
+				h.deps.Logger.Error("save assistant message to conversation failed",
+					"conversation_id", conversationID, "err", err)
+			}
+		}
+	}
 }
 
 func (h *handlers) metricsInc(name string) {

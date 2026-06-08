@@ -14,6 +14,7 @@ import (
 
 	"github.com/keaume34/qwen2api/internal/affinity"
 	"github.com/keaume34/qwen2api/internal/config"
+	"github.com/keaume34/qwen2api/internal/database"
 	"github.com/keaume34/qwen2api/internal/filecache"
 	"github.com/keaume34/qwen2api/internal/metrics"
 	"github.com/keaume34/qwen2api/internal/promptcache"
@@ -121,6 +122,20 @@ func run() error {
 		logger.Info("session persistence enabled", "max_sessions", cfg.Session.MaxSessions, "max_history", cfg.Session.MaxHistory, "data_dir", cfg.Session.DataDir)
 	}
 
+	var databaseStore *database.Store
+	if cfg.Features.ConversationMemory {
+		db, err := database.New(database.Config{
+			Type: cfg.Database.Type,
+			Path: cfg.Database.Path,
+			URL:  cfg.Database.URL,
+		}, logger)
+		if err != nil {
+			return fmt.Errorf("initialize database: %w", err)
+		}
+		databaseStore = database.NewStore(db, logger)
+		logger.Info("conversation memory enabled", "type", cfg.Database.Type, "path", cfg.Database.Path)
+	}
+
 	srv := server.New(server.Deps{
 		Config:        &cfg,
 		Logger:        logger,
@@ -134,6 +149,7 @@ func run() error {
 		TokenCounter:  tokenCounter,
 		SessionStore:  sessionStore,
 		TunnelManager: tunnelMgr,
+		Database:      databaseStore,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)
