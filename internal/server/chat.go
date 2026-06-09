@@ -48,130 +48,6 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	apiKey := bearerOrQuery(r)
 
-	// Conversation memory: if conversation_id provided, load history and append new messages
-	var conversationID string
-	if req.ConversationID != "" && h.deps.Database != nil && h.deps.Config.Features.ConversationMemory {
-		conversationID = req.ConversationID
-
-		// Check if conversation exists
-		exists, err := h.deps.Database.ConversationExists(conversationID)
-		if err != nil {
-			h.deps.Logger.Error("check conversation failed", "id", conversationID, "err", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to check conversation")
-			return
-		}
-		if !exists {
-			writeError(w, http.StatusNotFound, "not_found", "conversation not found: "+conversationID)
-			return
-		}
-
-		// Load conversation history
-		history, err := h.deps.Database.GetMessages(conversationID)
-		if err != nil {
-			h.deps.Logger.Error("load conversation history failed", "id", conversationID, "err", err)
-			writeError(w, http.StatusInternalServerError, "internal_error", "failed to load conversation history")
-			return
-		}
-
-		// Convert database messages to OpenAI format and prepend to request messages
-		// The client's new messages are at the end of req.Messages
-		// We need to prepend the history before the new messages
-		var historyMessages []openai.ChatMessage
-		for _, msg := range history {
-			contentBytes, _ := json.Marshal(msg.Content)
-			historyMessages = append(historyMessages, openai.ChatMessage{
-				Role:    msg.Role,
-				Content: contentBytes,
-			})
-		}
-
-		// Prepend history to request messages
-		req.Messages = append(historyMessages, req.Messages...)
-
-		h.deps.Logger.Info("loaded conversation history",
-			"conversation_id", conversationID,
-			"history_messages", len(history),
-			"total_messages", len(req.Messages),
-		)
-	}
-
-	// Claude Code optimization: auto-create conversation and send only new messages
-	clientType := DetectClient(r)
-	var claudeCodeOptimizer *ClaudeCodeOptimizer
-	var originalMessageCount int
-	if h.deps.Config.Features.ClaudeCodeOptimization && clientType == ClientClaudeCode {
-		claudeCodeOptimizer = NewClaudeCodeOptimizer(true)
-
-		// Auto-create conversation for Claude Code if not provided
-		if conversationID == "" && h.deps.Database != nil && h.deps.Config.Features.ConversationMemory {
-			// Generate deterministic conversation ID
-			firstUserMsg := ""
-			for _, m := range req.Messages {
-				if m.Role == "user" {
-					firstUserMsg = m.Text()
-					break
-				}
-			}
-			clientIP := r.RemoteAddr
-			// Extract IP from "IP:port" format
-			if colonIdx := strings.LastIndex(clientIP, ":"); colonIdx > 0 {
-				clientIP = clientIP[:colonIdx]
-			}
-			autoConvID := GenerateConversationID(r.Header.Get("User-Agent"), firstUserMsg, clientIP, clientType == ClientClaudeCode)
-			h.deps.Logger.Info("generated conversation ID for Claude Code",
-				"generated_id", autoConvID,
-				"client_ip", clientIP,
-				"user_agent", r.Header.Get("User-Agent")[:min(50, len(r.Header.Get("User-Agent")))],
-			)
-
-			// Check if conversation exists, create if not
-			exists, _ := h.deps.Database.ConversationExists(autoConvID)
-			if !exists {
-				_, err := h.deps.Database.CreateConversationWithID(autoConvID, "Claude Code Session", req.Model)
-				if err != nil {
-					h.deps.Logger.Error("create conversation failed", "id", autoConvID, "err", err)
-				} else {
-					h.deps.Logger.Info("auto-created conversation for Claude Code", "id", autoConvID)
-				}
-			} else {
-				h.deps.Logger.Info("reusing existing conversation for Claude Code", "id", autoConvID)
-			}
-			conversationID = autoConvID
-		}
-
-		// Find new messages by comparing with stored history
-		if conversationID != "" && h.deps.Database != nil {
-			storedMessages, err := h.deps.Database.GetMessages(conversationID)
-			if err == nil && len(storedMessages) > 0 {
-				// Find messages that are not in stored history
-				newMessages := FindNewMessages(req.Messages, storedMessages)
-				if len(newMessages) > 0 {
-					originalMessageCount = len(req.Messages)
-
-					// Build full context: stored history + new messages
-					var fullContext []openai.ChatMessage
-					for _, m := range storedMessages {
-						contentBytes, _ := json.Marshal(m.Content)
-						fullContext = append(fullContext, openai.ChatMessage{
-							Role:    m.Role,
-							Content: contentBytes,
-						})
-					}
-					fullContext = append(fullContext, newMessages...)
-
-					req.Messages = fullContext
-					h.deps.Logger.Info("Claude Code: loaded history + new messages",
-						"conversation_id", conversationID,
-						"original_messages", originalMessageCount,
-						"stored_history", len(storedMessages),
-						"new_messages", len(newMessages),
-						"total_sent", len(fullContext),
-					)
-				}
-			}
-		}
-	}
-
 	// File Cache (Phase 1 features)
 	h.processFileCache(apiKey, req.Messages)
 
@@ -494,12 +370,6 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				baseReq: upstreamReq,
 			}
 		}
-		// Add Claude Code optimization headers for streaming
-		if claudeCodeOptimizer != nil && conversationID != "" {
-			w.Header().Set("X-Conversation-ID", conversationID)
-			w.Header().Set("X-Optimization-Applied", "true")
-		}
-
 		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools, inputTokensFallback, cont)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 		h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
@@ -508,25 +378,6 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		if sess != nil && sessionHash != "" {
 			h.storeSessionAndMaybeSummarize(sessionHash, req.Messages, "", token.Value)
 		}
-
-		// Conversation memory: save ALL messages to database (for Claude Code)
-		if conversationID != "" && h.deps.Database != nil && h.deps.Config.Features.ConversationMemory {
-			// Save all messages from this request (not just the last one)
-			for _, msg := range req.Messages {
-				if msg.Role == "user" || msg.Role == "assistant" || msg.Role == "tool" {
-					_, err := h.deps.Database.AddMessage(conversationID, msg.Role, msg.Text())
-					if err != nil {
-						h.deps.Logger.Error("save message to conversation failed",
-							"conversation_id", conversationID, "role", msg.Role, "err", err)
-					}
-				}
-			}
-			h.deps.Logger.Info("saved messages to conversation",
-				"conversation_id", conversationID,
-				"count", len(req.Messages),
-			)
-		}
-
 		return
 	}
 
@@ -566,42 +417,9 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Add Claude Code optimization headers
-	if claudeCodeOptimizer != nil && conversationID != "" {
-		w.Header().Set("X-Conversation-ID", conversationID)
-		w.Header().Set("X-Optimization-Applied", "true")
-	}
-
 	writeJSON(w, http.StatusOK, resp)
 	h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 	h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
-
-	// Conversation memory: save ALL messages to database (for Claude Code)
-	if conversationID != "" && h.deps.Database != nil && h.deps.Config.Features.ConversationMemory {
-		// Save all messages from this request
-		for _, msg := range req.Messages {
-			if msg.Role == "user" || msg.Role == "assistant" || msg.Role == "tool" {
-				_, err := h.deps.Database.AddMessage(conversationID, msg.Role, msg.Text())
-				if err != nil {
-					h.deps.Logger.Error("save message to conversation failed",
-						"conversation_id", conversationID, "role", msg.Role, "err", err)
-				}
-			}
-		}
-		// Save assistant response
-		if fullContent != "" {
-			_, err := h.deps.Database.AddMessage(conversationID, "assistant", fullContent)
-			if err != nil {
-				h.deps.Logger.Error("save assistant message to conversation failed",
-					"conversation_id", conversationID, "err", err)
-			}
-		}
-		h.deps.Logger.Info("saved messages to conversation",
-			"conversation_id", conversationID,
-			"request_messages", len(req.Messages),
-			"has_response", fullContent != "",
-		)
-	}
 }
 
 func (h *handlers) metricsInc(name string) {
@@ -682,10 +500,39 @@ func (h *handlers) handleUpstreamFailure(w http.ResponseWriter, token string, er
 		if upstream.Status == http.StatusUnauthorized || upstream.Status == http.StatusForbidden {
 			h.deps.TokenPool.MarkBad(token)
 		}
+
+		// Track error if tracker is available
+		if h.deps.ErrorTracker != nil {
+			h.deps.ErrorTracker.Track(ErrorEntry{
+				Timestamp:   time.Now(),
+				RequestID:   fmt.Sprintf("req_%d", time.Now().UnixNano()),
+				StatusCode:  http.StatusBadGateway,
+				ErrorCode:   "upstream_error",
+				ErrorType:   "server_error",
+				Message:     fmt.Sprintf("qwen %s failed: %d", action, upstream.Status),
+				UpstreamErr: truncate(upstream.Body, 256),
+			})
+		}
+
 		writeError(w, http.StatusBadGateway, "upstream_error", fmt.Sprintf("qwen %s failed: %d", action, upstream.Status))
 		return
 	}
+
 	h.deps.Logger.Error("transport error", "action", action, "err", err)
+
+	// Track error if tracker is available
+	if h.deps.ErrorTracker != nil {
+		h.deps.ErrorTracker.Track(ErrorEntry{
+			Timestamp:   time.Now(),
+			RequestID:   fmt.Sprintf("req_%d", time.Now().UnixNano()),
+			StatusCode:  http.StatusBadGateway,
+			ErrorCode:   "upstream_error",
+			ErrorType:   "server_error",
+			Message:     "transport error: " + err.Error(),
+			UpstreamErr: err.Error(),
+		})
+	}
+
 	writeError(w, http.StatusBadGateway, "upstream_error", "transport error: "+err.Error())
 }
 

@@ -1,0 +1,483 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Error Tracking Dashboard - qwen2api</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #1a1a2e;
+            color: #eee;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #333;
+        }
+
+        h1 {
+            font-size: 28px;
+            color: #00d4ff;
+        }
+
+        .controls {
+            display: flex;
+            gap: 10px;
+        }
+
+        button {
+            padding: 10px 20px;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 14px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        button.primary {
+            background: #00d4ff;
+            color: #1a1a2e;
+        }
+
+        button.primary:hover {
+            background: #00b8d4;
+        }
+
+        button.secondary {
+            background: #333;
+            color: #eee;
+        }
+
+        button.secondary:hover {
+            background: #444;
+        }
+
+        button.danger {
+            background: #ff4444;
+            color: white;
+        }
+
+        button.danger:hover {
+            background: #cc0000;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: #16213e;
+            border-radius: 10px;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #00d4ff;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 14px;
+            color: #888;
+        }
+
+        .filters {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        select, input {
+            padding: 8px 12px;
+            background: #16213e;
+            border: 1px solid #333;
+            border-radius: 6px;
+            color: #eee;
+            font-size: 14px;
+        }
+
+        .error-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #16213e;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .error-table th {
+            background: #0f3460;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        .error-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #1a1a2e;
+            font-size: 13px;
+        }
+
+        .error-table tr:hover {
+            background: #1a1a3e;
+        }
+
+        .status-code {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-weight: bold;
+            font-size: 12px;
+        }
+
+        .status-4xx {
+            background: #ff9800;
+            color: #000;
+        }
+
+        .status-5xx {
+            background: #f44336;
+            color: white;
+        }
+
+        .error-type {
+            display: inline-block;
+            padding: 4px 8px;
+            background: #333;
+            border-radius: 4px;
+            font-size: 12px;
+        }
+
+        .timestamp {
+            color: #888;
+            font-size: 12px;
+        }
+
+        .message-cell {
+            max-width: 300px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .message-cell:hover {
+            white-space: normal;
+            overflow: visible;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #888;
+        }
+
+        .empty-state svg {
+            width: 64px;
+            height: 64px;
+            margin-bottom: 20px;
+            fill: #333;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #888;
+        }
+
+        .refresh-indicator {
+            font-size: 12px;
+            color: #888;
+            margin-left: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🚨 Error Tracking Dashboard</h1>
+            <div class="controls">
+                <span class="refresh-indicator" id="refreshIndicator">Auto-refresh: 30s</span>
+                <button class="secondary" onclick="refreshData()">Refresh</button>
+                <button class="danger" onclick="clearErrors()">Clear All</button>
+                <button class="secondary" onclick="cleanupOldErrors()">Cleanup Old (24h+)</button>
+            </div>
+        </div>
+
+        <div class="stats-grid" id="statsGrid">
+            <div class="stat-card">
+                <div class="stat-value" id="totalErrors">-</div>
+                <div class="stat-label">Total Errors</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="errors4xx">-</div>
+                <div class="stat-label">4xx Errors</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="errors5xx">-</div>
+                <div class="stat-label">5xx Errors</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="topPath">-</div>
+                <div class="stat-label">Top Error Path</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label>Limit</label>
+                <select id="limitFilter" onchange="refreshData()">
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                    <option value="200">200</option>
+                    <option value="500">500</option>
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>Path Filter</label>
+                <input type="text" id="pathFilter" placeholder="e.g., /v1/chat/completions" onchange="refreshData()">
+            </div>
+            <div class="filter-group">
+                <label>Status Filter</label>
+                <select id="statusFilter" onchange="refreshData()">
+                    <option value="">All</option>
+                    <option value="400">400</option>
+                    <option value="401">401</option>
+                    <option value="403">403</option>
+                    <option value="404">404</option>
+                    <option value="429">429</option>
+                    <option value="500">500</option>
+                    <option value="502">502</option>
+                    <option value="503">503</option>
+                </select>
+            </div>
+        </div>
+
+        <div id="errorTableContainer">
+            <div class="loading">Loading errors...</div>
+        </div>
+    </div>
+
+    <script>
+        let refreshInterval;
+
+        async function fetchErrors() {
+            const limit = document.getElementById('limitFilter').value;
+            const path = document.getElementById('pathFilter').value;
+            const status = document.getElementById('statusFilter').value;
+
+            let url = `/admin/errors?limit=${limit}`;
+            if (path) url += `&path=${encodeURIComponent(path)}`;
+            if (status) url += `&status=${status}`;
+
+            try {
+                const response = await fetch(url);
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to fetch errors:', error);
+                return null;
+            }
+        }
+
+        async function fetchStats() {
+            try {
+                const response = await fetch('/admin/errors/stats');
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to fetch stats:', error);
+                return null;
+            }
+        }
+
+        function updateStats(stats) {
+            if (!stats) return;
+
+            document.getElementById('totalErrors').textContent = stats.total_errors || 0;
+
+            // Calculate 4xx and 5xx counts
+            let count4xx = 0;
+            let count5xx = 0;
+            if (stats.by_status) {
+                Object.entries(stats.by_status).forEach(([status, count]) => {
+                    const code = parseInt(status);
+                    if (code >= 400 && code < 500) count4xx += count;
+                    if (code >= 500 && code < 600) count5xx += count;
+                });
+            }
+            document.getElementById('errors4xx').textContent = count4xx;
+            document.getElementById('errors5xx').textContent = count5xx;
+
+            // Find top error path
+            if (stats.by_path && Object.keys(stats.by_path).length > 0) {
+                const topPath = Object.entries(stats.by_path)
+                    .sort(([,a], [,b]) => b - a)[0][0];
+                document.getElementById('topPath').textContent = topPath.length > 20
+                    ? topPath.substring(0, 20) + '...'
+                    : topPath;
+            } else {
+                document.getElementById('topPath').textContent = '-';
+            }
+        }
+
+        function renderErrorTable(errors) {
+            const container = document.getElementById('errorTableContainer');
+
+            if (!errors || errors.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg viewBox="0 0 24 24">
+                            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                        </svg>
+                        <h3>No errors found</h3>
+                        <p>Everything is running smoothly!</p>
+                    </div>
+                `;
+                return;
+            }
+
+            let html = `
+                <table class="error-table">
+                    <thead>
+                        <tr>
+                            <th>Timestamp</th>
+                            <th>Status</th>
+                            <th>Error Code</th>
+                            <th>Path</th>
+                            <th>Message</th>
+                            <th>Client IP</th>
+                            <th>Duration</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+
+            errors.reverse().forEach(error => {
+                const timestamp = new Date(error.timestamp).toLocaleString();
+                const statusClass = error.status_code >= 500 ? 'status-5xx' : 'status-4xx';
+                const duration = error.duration_ms ? `${error.duration_ms}ms` : '-';
+                const message = error.message || '-';
+                const clientIp = error.client_ip || '-';
+
+                html += `
+                    <tr>
+                        <td class="timestamp">${timestamp}</td>
+                        <td><span class="status-code ${statusClass}">${error.status_code}</span></td>
+                        <td><span class="error-type">${error.error_code || '-'}</span></td>
+                        <td>${error.path || '-'}</td>
+                        <td class="message-cell" title="${message}">${message}</td>
+                        <td>${clientIp}</td>
+                        <td>${duration}</td>
+                    </tr>
+                `;
+            });
+
+            html += `
+                    </tbody>
+                </table>
+            `;
+
+            container.innerHTML = html;
+        }
+
+        async function refreshData() {
+            const [data, stats] = await Promise.all([fetchErrors(), fetchStats()]);
+
+            if (data) {
+                renderErrorTable(data.errors);
+            }
+
+            if (stats) {
+                updateStats(stats);
+            }
+        }
+
+        async function clearErrors() {
+            if (!confirm('Are you sure you want to clear all error history?')) {
+                return;
+            }
+
+            try {
+                const response = await fetch('/admin/errors', { method: 'DELETE' });
+                if (response.ok) {
+                    await refreshData();
+                } else {
+                    alert('Failed to clear errors');
+                }
+            } catch (error) {
+                console.error('Failed to clear errors:', error);
+                alert('Failed to clear errors');
+            }
+        }
+
+        async function cleanupOldErrors() {
+            try {
+                const response = await fetch('/admin/errors/cleanup', { method: 'POST' });
+                if (response.ok) {
+                    await refreshData();
+                } else {
+                    alert('Failed to cleanup errors');
+                }
+            } catch (error) {
+                console.error('Failed to cleanup errors:', error);
+                alert('Failed to cleanup errors');
+            }
+        }
+
+        // Initial load
+        refreshData();
+
+        // Auto-refresh every 30 seconds
+        refreshInterval = setInterval(refreshData, 30000);
+
+        // Update refresh indicator
+        setInterval(() => {
+            const indicator = document.getElementById('refreshIndicator');
+            const now = new Date();
+            indicator.textContent = `Last updated: ${now.toLocaleTimeString()}`;
+        }, 1000);
+    </script>
+</body>
+</html>

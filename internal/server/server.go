@@ -11,7 +11,6 @@ import (
 
 	"github.com/keaume34/qwen2api/internal/affinity"
 	"github.com/keaume34/qwen2api/internal/config"
-	"github.com/keaume34/qwen2api/internal/database"
 	"github.com/keaume34/qwen2api/internal/filecache"
 	"github.com/keaume34/qwen2api/internal/metrics"
 	"github.com/keaume34/qwen2api/internal/ossupload"
@@ -45,8 +44,9 @@ type Deps struct {
 	}
 	ShutdownCh chan struct{}
 
-	// Conversation memory
-	Database *database.Store
+	// Error handling and tracking
+	ErrorHandler *ErrorHandler
+	ErrorTracker *ErrorTracker
 }
 
 // New returns the configured http.Handler.
@@ -56,6 +56,11 @@ func New(deps Deps) http.Handler {
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 	r.Use(corsMiddleware)
+
+	// Add error logging middleware
+	if deps.ErrorHandler != nil {
+		r.Use(ErrorLoggingMiddleware(deps.Logger))
+	}
 
 	h := &handlers{
 		deps:          deps,
@@ -106,14 +111,6 @@ func New(deps Deps) http.Handler {
 		// Claude Code count_tokens endpoint
 		r.Post("/v1/messages/count_tokens", h.claudeCountTokens)
 		r.Post("/messages/count_tokens", h.claudeCountTokens)
-
-		// Conversation memory endpoints
-		r.Post("/v1/conversations", h.createConversation)
-		r.Get("/v1/conversations", h.listConversations)
-		r.Get("/v1/conversations/{id}", h.getConversation)
-		r.Put("/v1/conversations/{id}", h.updateConversation)
-		r.Delete("/v1/conversations/{id}", h.deleteConversation)
-		r.Get("/v1/conversations/{id}/messages", h.getConversationMessages)
 	})
 
 	r.Group(func(r chi.Router) {
@@ -144,6 +141,9 @@ func New(deps Deps) http.Handler {
 		r.Get("/admin/cliconfig/status", h.getCliConfigStatus)
 		r.Post("/admin/cliconfig/apply", h.applyCliConfig)
 		r.Post("/admin/cliconfig/reset", h.resetCliConfig)
+
+		// Error tracking API
+		registerErrorRoutes(r, h)
 	})
 
 	return r
