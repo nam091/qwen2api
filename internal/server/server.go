@@ -11,6 +11,7 @@ import (
 
 	"github.com/keaume34/qwen2api/internal/affinity"
 	"github.com/keaume34/qwen2api/internal/config"
+	"github.com/keaume34/qwen2api/internal/database"
 	"github.com/keaume34/qwen2api/internal/filecache"
 	"github.com/keaume34/qwen2api/internal/metrics"
 	"github.com/keaume34/qwen2api/internal/ossupload"
@@ -47,6 +48,12 @@ type Deps struct {
 	// Error handling and tracking
 	ErrorHandler *ErrorHandler
 	ErrorTracker *ErrorTracker
+
+	// Database for conversation persistence
+	Database *database.Store
+
+	// Cookie store for dynamic cookie updates
+	CookieStore *CookieStore
 }
 
 // New returns the configured http.Handler.
@@ -145,6 +152,9 @@ func New(deps Deps) http.Handler {
 
 		// Error tracking API
 		registerErrorRoutes(r, h)
+
+		// Cookie management API
+		registerCookieRoutes(r, h)
 	})
 
 	return r

@@ -58,8 +58,12 @@ func run() error {
 		TimeoutSeconds:         cfg.TimeoutSeconds,
 		PoolingEnabled:         cfg.Features.ConnectionPooling,
 		BrowserFallbackEnabled: cfg.Features.BrowserEngineFallback,
-	})
+	}, logger)
 	client.SetConfigRef(&cfg)
+
+	// Initialize cookie store and connect to client
+	cookieStore := server.NewCookieStore()
+	client.SetCookieProvider(cookieStore)
 
 	var cache *promptcache.Cache
 	if cfg.Features.PromptCaching {
@@ -143,6 +147,7 @@ func run() error {
 		TunnelManager: tunnelMgr,
 		ErrorHandler:  errorHandler,
 		ErrorTracker:  errorTracker,
+		CookieStore:   cookieStore,
 	})
 
 	addr := fmt.Sprintf(":%d", cfg.Port)

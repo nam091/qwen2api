@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
@@ -44,6 +45,25 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	if len(req.Messages) == 0 {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "messages must not be empty")
 		return
+	}
+
+	// Debug logging for message content
+	h.deps.Logger.Info("received request",
+		"model", req.Model,
+		"message_count", len(req.Messages),
+		"stream", req.Stream,
+	)
+	for i, m := range req.Messages {
+		text := m.Text()
+		h.deps.Logger.Info("message details",
+			"index", i,
+			"role", m.Role,
+			"content_raw", string(m.Content),
+			"content_length", len(m.Content),
+			"text_length", len(text),
+			"text_preview", truncate(text, 100),
+			"is_empty", text == "",
+		)
 	}
 
 	apiKey := bearerOrQuery(r)
@@ -93,7 +113,27 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	// and the upstream request builder to avoid redundant O(n*m) string building.
 	collapsedText := collapseMessages(req.Messages)
 
+	// Debug logging for collapsed text
+	h.deps.Logger.Info("collapsed text",
+		"length", len(collapsedText),
+		"preview", truncate(collapsedText, 200),
+	)
+
 	upstreamReq := buildQwenRequestFullCollapsed(req, collapsedText, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
+
+	// Debug logging for upstream request
+	h.deps.Logger.Info("upstream request built",
+		"model", upstreamReq.Model,
+		"chat_type", upstreamReq.ChatType,
+		"message_count", len(upstreamReq.Messages),
+	)
+	if len(upstreamReq.Messages) > 0 {
+		h.deps.Logger.Info("first upstream message",
+			"role", upstreamReq.Messages[0].Role,
+			"content_length", len(upstreamReq.Messages[0].Content),
+			"content_parts_count", len(upstreamReq.Messages[0].ContentParts),
+		)
+	}
 
 	// If session has a summary and enough history, prepend it to the collapsed text
 	if sess != nil && sess.Summary != "" && len(req.Messages) > h.deps.Config.Session.RollingHistoryK {
@@ -877,6 +917,7 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 	finishReason := "stop"
 	var upstreamInputTokens, upstreamOutputTokens int
 	var hasUpstreamUsage bool
+	eventCount := 0
 
 	for {
 		evt, err := reader.Next()
@@ -884,11 +925,32 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 			break
 		}
 		if err != nil {
+			h.deps.Logger.Error("error reading upstream event", "err", err)
 			return openai.ChatCompletion{}, "", false, err
 		}
 		if evt.Done {
 			break
 		}
+		eventCount++
+
+		// Debug logging for upstream events
+		if eventCount <= 5 || h.deps.Logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.deps.Logger.Info("upstream event",
+				"event_number", eventCount,
+				"has_delta", evt.Delta != nil,
+				"choices_count", len(evt.Delta.Choices),
+			)
+			if evt.Delta != nil && len(evt.Delta.Choices) > 0 {
+				choice := evt.Delta.Choices[0]
+				h.deps.Logger.Info("upstream choice",
+					"phase", choice.Delta.Phase,
+					"content_length", len(choice.Delta.Content),
+					"content_preview", truncate(choice.Delta.Content, 100),
+					"finish_reason", choice.FinishReason,
+				)
+			}
+		}
+
 		// Capture upstream usage if present
 		if evt.Delta != nil && evt.Delta.Usage != nil {
 			if evt.Delta.Usage.InputTokens > 0 {

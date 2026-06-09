@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"strings"
@@ -36,17 +37,24 @@ type ClientConfig struct {
 	BrowserFallbackEnabled bool
 }
 
+// CookieProvider provides cookies dynamically.
+type CookieProvider interface {
+	Get() map[string]string
+}
+
 // Client talks to chat.qwen.ai.
 type Client struct {
-	cfg       ClientConfig
-	http      *http.Client
-	stream    *http.Client
-	configRef *config.Config
-	browser   *browserengine.HybridEngine
+	cfg           ClientConfig
+	http          *http.Client
+	stream        *http.Client
+	configRef     *config.Config
+	browser       *browserengine.HybridEngine
+	logger        *slog.Logger
+	cookieProvider CookieProvider
 }
 
 // NewClient constructs a Client with sensible defaults.
-func NewClient(cfg ClientConfig) *Client {
+func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
 	if cfg.BaseURL == "" {
 		cfg.BaseURL = "https://chat.qwen.ai"
 	}
@@ -110,12 +118,18 @@ func NewClient(cfg ClientConfig) *Client {
 		http:    httpClient,
 		stream:  streamClient,
 		browser: browser,
+		logger:  logger,
 	}
 }
 
 // SetConfigRef sets the config reference for dynamic checks.
 func (c *Client) SetConfigRef(cfg *config.Config) {
 	c.configRef = cfg
+}
+
+// SetCookieProvider sets the cookie provider for dynamic cookie updates.
+func (c *Client) SetCookieProvider(provider CookieProvider) {
+	c.cookieProvider = provider
 }
 
 // applyHeaders adds the standard set of headers expected by chat.qwen.ai. The
@@ -125,26 +139,66 @@ func (c *Client) applyHeaders(req *http.Request, token string) {
 	origin := strings.TrimRight(c.cfg.BaseURL, "/")
 	req.Header.Set("Authorization", "Bearer "+token)
 	req.Header.Set("User-Agent", c.cfg.UserAgent)
-	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Accept", "*/*")
 	req.Header.Set("Accept-Language", "en-US,en;q=0.9")
+	req.Header.Set("Accept-Encoding", "gzip, deflate")
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Origin", origin)
 	req.Header.Set("Referer", origin+"/")
 	req.Header.Set("Sec-Fetch-Site", "same-origin")
 	req.Header.Set("Sec-Fetch-Mode", "cors")
 	req.Header.Set("Sec-Fetch-Dest", "empty")
-	req.Header.Set("source", "web")
-	req.Header.Set("Version", "0.2.50")
 	req.Header.Set("bx-v", "2.5.36")
-	req.Header.Set("Timezone", time.Now().Format("Mon Jan 02 2006 15:04:05 GMT-0700"))
+	req.Header.Set("Connection", "keep-alive")
 	req.Header.Set("X-Request-Id", uuid.NewString())
+
+	// Build cookies
 	cookies := []string{"token=" + token}
-	if c.cfg.SsxmodItna != "" {
-		cookies = append(cookies, "ssxmod_itna="+c.cfg.SsxmodItna)
+
+	// Try to get cookies from dynamic cookie provider first
+	if c.cookieProvider != nil {
+		dynamicCookies := c.cookieProvider.Get()
+		if c.logger != nil {
+			c.logger.Info("using dynamic cookies",
+				"has_ssxmod_itna", dynamicCookies["ssxmod_itna"] != "",
+				"has_ssxmod_itna2", dynamicCookies["ssxmod_itna2"] != "",
+			)
+		}
+		if ssxmodItNa, ok := dynamicCookies["ssxmod_itna"]; ok && ssxmodItNa != "" {
+			cookies = append(cookies, "ssxmod_itna="+ssxmodItNa)
+		} else if c.cfg.SsxmodItna != "" {
+			cookies = append(cookies, "ssxmod_itna="+c.cfg.SsxmodItna)
+		}
+		if ssxmodItNa2, ok := dynamicCookies["ssxmod_itna2"]; ok && ssxmodItNa2 != "" {
+			cookies = append(cookies, "ssxmod_itna2="+ssxmodItNa2)
+		} else if c.cfg.Ssxmodi2 != "" {
+			cookies = append(cookies, "ssxmod_itna2="+c.cfg.Ssxmodi2)
+		}
+	} else {
+		// Fallback to static config
+		if c.cfg.SsxmodItna != "" {
+			cookies = append(cookies, "ssxmod_itna="+c.cfg.SsxmodItna)
+		}
+		if c.cfg.Ssxmodi2 != "" {
+			cookies = append(cookies, "ssxmod_itna2="+c.cfg.Ssxmodi2)
+		}
 	}
-	if c.cfg.Ssxmodi2 != "" {
-		cookies = append(cookies, "ssxmod_itna2="+c.cfg.Ssxmodi2)
+
+	if c.logger != nil {
+		c.logger.Info("final cookies",
+			"cookie_count", len(cookies),
+			"cookies", strings.Join(cookies, "; "),
+		)
+		c.logger.Info("request headers",
+			"authorization", req.Header.Get("Authorization"),
+			"user_agent", req.Header.Get("User-Agent"),
+			"accept", req.Header.Get("Accept"),
+			"bx-v", req.Header.Get("bx-v"),
+			"source", req.Header.Get("source"),
+			"version", req.Header.Get("Version"),
+		)
 	}
+
 	req.Header.Set("Cookie", strings.Join(cookies, "; "))
 
 	pooling := c.cfg.PoolingEnabled
@@ -247,6 +301,27 @@ func (c *Client) Completions(ctx context.Context, token string, req CompletionRe
 	if err != nil {
 		return nil, err
 	}
+
+	// Debug logging for request
+	if c.logger != nil {
+		c.logger.Info("sending upstream request",
+			"endpoint", "/api/v2/chat/completions",
+			"chat_id", req.ChatID,
+			"model", req.Model,
+			"chat_type", req.ChatType,
+			"message_count", len(req.Messages),
+			"request_body_length", len(raw),
+			"request_body", string(raw),
+		)
+		if len(req.Messages) > 0 {
+			c.logger.Info("first message in request",
+				"role", req.Messages[0].Role,
+				"content_length", len(req.Messages[0].Content),
+				"content", req.Messages[0].Content,
+			)
+		}
+	}
+
 	endpoint, err := url.JoinPath(c.cfg.BaseURL, "/api/v2/chat/completions")
 	if err != nil {
 		return nil, err
@@ -263,14 +338,74 @@ func (c *Client) Completions(ctx context.Context, token string, req CompletionRe
 
 	resp, err := c.doStreamWithFallback(ctx, httpReq)
 	if err != nil {
+		if c.logger != nil {
+			c.logger.Error("upstream request failed", "err", err)
+		}
 		return nil, err
 	}
+
+	if c.logger != nil {
+		c.logger.Info("upstream response received",
+			"status_code", resp.StatusCode,
+			"content_type", resp.Header.Get("Content-Type"),
+			"headers", fmt.Sprintf("%v", resp.Header),
+		)
+	}
+
 	if resp.StatusCode != http.StatusOK {
 		body, _ := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
+		if c.logger != nil {
+			c.logger.Error("upstream error response",
+				"status_code", resp.StatusCode,
+				"body", string(body),
+			)
+		}
 		return nil, &UpstreamError{Status: resp.StatusCode, Body: string(body)}
 	}
-	return resp.Body, nil
+
+	// Read first few bytes to check if it's JSON or SSE
+	peek := make([]byte, 100)
+	n, _ := io.ReadFull(resp.Body, peek)
+	if c.logger != nil {
+		c.logger.Info("upstream response peek",
+			"first_bytes", string(peek[:n]),
+			"is_json", strings.HasPrefix(string(peek[:n]), "{"),
+			"is_sse", strings.HasPrefix(string(peek[:n]), "data:"),
+		)
+	}
+
+	// If it's JSON, read the full response and check for errors
+	if strings.HasPrefix(string(peek[:n]), "{") {
+		// Read the rest of the body
+		rest, _ := io.ReadAll(resp.Body)
+		fullBody := string(peek[:n]) + string(rest)
+		if c.logger != nil {
+			c.logger.Info("upstream JSON response",
+				"body", fullBody,
+			)
+		}
+
+		// Check if it's an error response
+		var errResp struct {
+			Ret []string `json:"ret"`
+		}
+		if err := json.Unmarshal([]byte(fullBody), &errResp); err == nil && len(errResp.Ret) > 0 {
+			if c.logger != nil {
+				c.logger.Error("upstream error response",
+					"ret", errResp.Ret,
+				)
+			}
+			return nil, &UpstreamError{Status: resp.StatusCode, Body: fullBody}
+		}
+
+		// Return the full body as a reader
+		return io.NopCloser(strings.NewReader(fullBody)), nil
+	}
+
+	// Create a new reader that includes the peeked bytes
+	combined := io.MultiReader(bytes.NewReader(peek[:n]), resp.Body)
+	return io.NopCloser(combined), nil
 }
 
 // UpstreamError captures a non-2xx response from chat.qwen.ai.
