@@ -7,8 +7,10 @@ import (
 	"io"
 	"math"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/keaume34/qwen2api/internal/openai"
 	"github.com/keaume34/qwen2api/internal/qwen"
@@ -208,9 +210,26 @@ func extractImageGenURLs(r io.Reader) []string {
 	return urls
 }
 
+// maxImageSize is the maximum allowed size for fetched images (10 MB).
+const maxImageSize = 10 << 20
+
+// allowedImageSchemes restricts fetchImageBase64 to safe URL schemes.
+var allowedImageSchemes = map[string]bool{"https": true, "http": true}
+
 // fetchImageBase64 downloads an image and returns its base64 encoding.
-func fetchImageBase64(url string) (string, error) {
-	resp, err := http.Get(url)
+// It validates the URL scheme and limits the response body size to prevent
+// SSRF and memory exhaustion attacks.
+func fetchImageBase64(rawURL string) (string, error) {
+	parsed, err := url.Parse(rawURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid URL: %w", err)
+	}
+	if !allowedImageSchemes[parsed.Scheme] {
+		return "", fmt.Errorf("disallowed URL scheme: %s", parsed.Scheme)
+	}
+
+	client := &http.Client{Timeout: 30 * time.Second}
+	resp, err := client.Get(rawURL)
 	if err != nil {
 		return "", err
 	}
@@ -218,9 +237,12 @@ func fetchImageBase64(url string) (string, error) {
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, maxImageSize+1))
 	if err != nil {
 		return "", err
+	}
+	if int64(len(data)) > maxImageSize {
+		return "", fmt.Errorf("image exceeds maximum allowed size of %d bytes", maxImageSize)
 	}
 	return base64.StdEncoding.EncodeToString(data), nil
 }

@@ -23,7 +23,7 @@ func (h *handlers) saveConfig() error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0600)
 }
 
 // getConfig returns the current configuration (admin only).

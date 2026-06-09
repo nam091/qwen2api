@@ -15,10 +15,16 @@ import (
 	"github.com/keaume34/qwen2api/internal/ossupload"
 )
 
-const token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjY3OGM5NzQ2LTUyZjQtNGQ4YS1hNTJiLWI5YmRhN2QwOGEzMyIsImxhc3RfcGFzc3dvcmRfY2hhbmdlIjoxNzc4NzcyMjM5LCJleHAiOjE3ODEzNjQyNDF9.0XQvB0n-DTgczi3UJklORODHEJXzKp2etJHt9cKqtX4"
+// token must be provided via QWEN_TOKEN environment variable.
+// Never hardcode credentials in source code.
+var token = os.Getenv("QWEN_TOKEN")
 const UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36"
 
 func main() {
+	if token == "" {
+		fmt.Fprintln(os.Stderr, "error: QWEN_TOKEN environment variable is required")
+		os.Exit(1)
+	}
 	ctx := context.Background()
 	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}))
 

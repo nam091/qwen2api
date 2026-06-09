@@ -79,7 +79,7 @@ func New(deps Deps) http.Handler {
 		r.Get("/metrics", h.prometheusMetrics)
 	}
 	r.Get("/dashboard", h.dashboard)
-	r.Get("/dashboard/data", h.dashboardData)
+	// NOTE: /dashboard/data moved inside adminMiddleware group below
 	r.Get("/v1", func(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "API key required for remote API access"})
 	})
@@ -115,6 +115,7 @@ func New(deps Deps) http.Handler {
 
 	r.Group(func(r chi.Router) {
 		r.Use(h.adminMiddleware)
+		r.Get("/dashboard/data", h.dashboardData)
 		r.Get("/admin/keys", h.listAPIKeys)
 		r.Post("/admin/keys", h.createAPIKey)
 		r.Delete("/admin/keys/{value}", h.deleteAPIKey)

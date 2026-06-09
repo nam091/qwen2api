@@ -3,6 +3,7 @@
 package config
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -368,8 +369,9 @@ func (c Config) AuthorizedKey(key string) bool {
 		return true
 	}
 	now := nowFunc()
+	keyBytes := []byte(key)
 	for _, k := range c.APIKeys {
-		if k.Value == "" || k.Value != key {
+		if k.Value == "" || subtle.ConstantTimeCompare([]byte(k.Value), keyBytes) != 1 {
 			continue
 		}
 		if k.ExpiresAt > 0 && k.ExpiresAt < now {
@@ -383,10 +385,10 @@ func (c Config) AuthorizedKey(key string) bool {
 // AuthorizedAdmin returns true if the given token matches the admin token.
 // When no admin token is configured, all admin endpoints are denied.
 func (c Config) AuthorizedAdmin(token string) bool {
-	if c.AdminToken == "" {
+	if c.AdminToken == "" || token == "" {
 		return false
 	}
-	return token != "" && token == c.AdminToken
+	return subtle.ConstantTimeCompare([]byte(token), []byte(c.AdminToken)) == 1
 }
 
 // ResolveModel applies model aliases configured by the user.

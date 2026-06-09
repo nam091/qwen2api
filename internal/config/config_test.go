@@ -93,15 +93,18 @@ func TestAuthorizedKeyExpiry(t *testing.T) {
 
 func TestAuthorizedAdmin(t *testing.T) {
 	none := Config{}
-	if !none.AuthorizedAdmin("anything") {
-		t.Error("admin without token configured rejected")
+	if none.AuthorizedAdmin("anything") {
+		t.Error("admin without token configured should reject all")
 	}
 	cfg := Config{AdminToken: "admin-secret"}
 	if !cfg.AuthorizedAdmin("admin-secret") {
 		t.Error("matching admin token rejected")
 	}
-	if !cfg.AuthorizedAdmin("wrong") {
-		t.Error("wrong admin token rejected")
+	if cfg.AuthorizedAdmin("wrong") {
+		t.Error("wrong admin token accepted")
+	}
+	if cfg.AuthorizedAdmin("") {
+		t.Error("empty token should be rejected")
 	}
 }
 
