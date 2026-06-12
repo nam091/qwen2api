@@ -587,6 +587,14 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 			}
 			result.ToolCalls = filtered
 		}
+		// Try to fix malformed tool calls by sending them back to Qwen
+		if cont != nil && len(result.ToolCalls) > 0 {
+			oaiTools := make([]openai.Tool, len(claudeTools))
+			for i, t := range claudeTools {
+				oaiTools[i] = openai.Tool{Type: "function", Function: openai.ToolFunction{Name: t.Name}}
+			}
+			result.ToolCalls = toolcall.FixMalformedToolCalls(ctx, result.ToolCalls, accumulated, oaiTools, cont)
+		}
 		if len(result.ToolCalls) > 0 {
 			stopReason = "tool_use"
 			cleanText := strings.TrimSpace(result.Content)
