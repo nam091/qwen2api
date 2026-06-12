@@ -20,6 +20,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/session"
 	"github.com/keaume34/qwen2api/internal/toolcall"
+	"github.com/keaume34/qwen2api/internal/toolname"
 )
 
 func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
@@ -27,6 +28,12 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		_ = r.Body.Close()
 	}()
+
+	// Rate limit: wait for a slot to prevent overwhelming upstream
+	if h.rateLimiter != nil {
+		release := h.rateLimiter.Acquire()
+		defer release()
+	}
 
 	bodyBytes, readErr := io.ReadAll(r.Body)
 	if readErr != nil {
@@ -319,6 +326,7 @@ func (h *handlers) responses(w http.ResponseWriter, r *http.Request) {
 		h.logRequestEndpoint(r, chatReq, "responses", token.Value, http.StatusBadGateway, time.Since(start), false, retries, fmt.Errorf("all retries exhausted"))
 		return
 	}
+	h.deps.TokenPool.MarkGood(token.Value)
 
 	responseID := "resp_" + uuid.NewString()
 	createdAt := unixNow()
@@ -516,6 +524,10 @@ func (h *handlers) collectResponsesCompletion(body io.ReadCloser, id string, cre
 	if hasTools {
 		result := toolcall.ParseWithFormats(fullContent, h.deps.Config.Features.MultiFormatToolParsing)
 		if len(result.ToolCalls) > 0 {
+			// Deobfuscate tool names (strip u_ prefix)
+			for i := range result.ToolCalls {
+				result.ToolCalls[i].Function.Name = toolname.FromQwen(result.ToolCalls[i].Function.Name)
+			}
 			if strings.TrimSpace(result.Content) != "" {
 				output = append(output, openai.ResponseOutputItem{
 					Type:   "message",
@@ -851,6 +863,10 @@ func (h *handlers) proxyResponsesStream(ctx context.Context, w http.ResponseWrit
 	if hasTools {
 		result := toolcall.ParseWithFormats(accumulated, multiFormat)
 		if len(result.ToolCalls) > 0 {
+			// Deobfuscate tool names (strip u_ prefix)
+			for i := range result.ToolCalls {
+				result.ToolCalls[i].Function.Name = toolname.FromQwen(result.ToolCalls[i].Function.Name)
+			}
 			toolCalls = result.ToolCalls
 			textContent = result.Content
 		}

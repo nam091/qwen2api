@@ -1,4 +1,4 @@
-﻿package server
+package server
 
 import (
 	"bytes"
@@ -62,6 +62,11 @@ func newStreamPacer(r *qwen.StreamReader, keepAlive time.Duration) *streamPacer 
 
 func (p *streamPacer) run() {
 	defer close(p.events)
+	defer func() {
+		if r := recover(); r != nil {
+			p.events <- pacerEvent{Err: fmt.Errorf("stream reader panic: %v", r)}
+		}
+	}()
 	for {
 		evt, err := p.reader.Next()
 		p.events <- pacerEvent{Evt: evt, Err: err}

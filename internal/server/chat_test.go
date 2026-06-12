@@ -40,7 +40,7 @@ func newTestServerWithCache(t *testing.T, upstream *httptest.Server) http.Handle
 	client := qwen.NewClient(qwen.ClientConfig{
 		BaseURL:        upstream.URL,
 		TimeoutSeconds: 10,
-	})
+	}, slog.Default())
 	pool := tokenpool.New(cfg.Tokens, time.Minute)
 	cache := promptcache.New(1024, time.Minute)
 	return New(Deps{
@@ -69,7 +69,7 @@ func newTestServer(t *testing.T, upstream *httptest.Server) http.Handler {
 	client := qwen.NewClient(qwen.ClientConfig{
 		BaseURL:        upstream.URL,
 		TimeoutSeconds: 10,
-	})
+	}, slog.Default())
 	pool := tokenpool.New(cfg.Tokens, time.Minute)
 	return New(Deps{
 		Config:    &cfg,

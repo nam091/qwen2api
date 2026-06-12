@@ -104,3 +104,32 @@ func TestRepair_TabsInStrings(t *testing.T) {
 		t.Errorf("result not valid JSON: %s", got)
 	}
 }
+
+func TestRepair_MalformedKeyWithColon(t *testing.T) {
+	input := `{"name:": "web_query", "arguments": {"query": "test"}}`
+	got, changed := Repair(input)
+	if !changed {
+		t.Error("should have changed")
+	}
+	if !json.Valid([]byte(got)) {
+		t.Errorf("result not valid JSON: %s", got)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal([]byte(got), &parsed); err != nil {
+		t.Fatal(err)
+	}
+	if parsed["name"] != "web_query" {
+		t.Errorf("name = %v, want web_query", parsed["name"])
+	}
+}
+
+func TestRepair_MalformedKeyMultiple(t *testing.T) {
+	input := `{"name:": "Bash", "arguments:": {"command": "ls"}}`
+	got, changed := Repair(input)
+	if !changed {
+		t.Error("should have changed")
+	}
+	if !json.Valid([]byte(got)) {
+		t.Errorf("result not valid JSON: %s", got)
+	}
+}

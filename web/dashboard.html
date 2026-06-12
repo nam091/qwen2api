@@ -4,6 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Qw2API - Premium Gateway Dashboard</title>
+  <script>
+    // Force reset if ?reset=1 in URL
+    if (window.location.search.includes("reset=1")) {
+      localStorage.removeItem("adminToken");
+      localStorage.removeItem("adminTokenExpiry");
+      window.location.href = window.location.pathname;
+    }
+  </script>
 <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='%23E56A4A' viewBox='0 0 24 24'%3E%3Cpath d='M12.604 1.34c.393.69.784 1.382 1.174 2.075a.18.18 0 00.157.091h5.552c.174 0 .322.11.446.327l1.454 2.57c.19.337.24.478.024.837-.26.43-.513.864-.76 1.3l-.367.658c-.106.196-.223.28-.04.512l2.652 4.637c.172.301.111.494-.043.77-.437.785-.882 1.564-1.335 2.34-.159.272-.352.375-.68.37-.777-.016-1.552-.01-2.327.016a.099.099 0 00-.081.05 575.097 575.097 0 01-2.705 4.74c-.169.293-.38.363-.725.364-.997.003-2.002.004-3.017.002a.537.537 0 01-.465-.271l-1.335-2.323a.09.09 0 00-.083-.049H4.982c-.285.03-.553-.001-.805-.092l-1.603-2.77a.543.543 0 01-.002-.54l1.207-2.12a.198.198 0 000-.197 550.951 550.951 0 01-1.875-3.272l-.79-1.395c-.16.31-.173-.496.095-.965.465-.813.927-1.625 1.387-2.436.132-.234.304-.334.584-.335a338.3 338.3 0 012.589-.001.124.124 0 00.107-.063l2.806-4.895a.488.488 0 01.422-.246c.524-.001 1.053 0 1.583-.006L11.704 1c.341-.003.724.032.9.34zm-3.432.403a.06.06 0 00-.052.03L6.254 6.788a.157.157 0 01-.135.078H3.253c-.056 0-.07.025-.041.074l5.81 10.156c.025.042.013.062-.034.063l-2.795.015a.218.218 0 00-.2.116l-1.32 2.31c-.044.078-.021.118.068.118l5.716.008c.046 0 .08.02.104.061l1.403 2.454c.046.081.092.082.139 0l5.006-8.76.783-1.382a.055.055 0 01.096 0l1.424 2.53a.122.122 0 00.107.062l2.763-.02a.04.04 0 00.035-.02.041.041 0 000-.04l-2.9-5.086a.108.108 0 010-.113l.293-.507 1.12-1.977c.024-.041.012-.062-.035-.062H9.2c-.059 0-.073-.026-.043-.077l1.434-2.505a.107.107 0 000-.114L9.225 1.774a.06.06 0 00-.053-.031zm6.29 8.02c.046 0 .058.02.034.06l-.832 1.465-2.613 4.585a.056.056 0 01-.05.029.058.058 0 01-.05-.029L8.498 9.841c-.02-.034-.01-.052.028-.054l.216-.012 6.722-.012z'/%3E%3C/svg%3E" />
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -1006,9 +1014,9 @@
       <h2 style="margin-bottom: 8px;">Authorization Required</h2>
       <p style="color: var(--text-secondary); font-size: 13px; margin-bottom: 24px;">Please enter your admin token to manage endpoints</p>
       <div class="form-group" style="text-align: left;">
-        <input type="password" id="authAdminToken" placeholder="Enter Token Value">
+        <input type="password" id="authAdminToken" placeholder="Enter Token Value" onkeydown="if(event.key==='Enter')submitAuthToken()">
       </div>
-      <button class="btn btn-primary" style="width: 100%;" onclick="submitAuthToken()">Unlock Dashboard</button>
+      <div style="text-align:left;margin-bottom:16px;"><label style="font-size:12px;color:var(--text-muted);margin-bottom:6px;display:block;">Session Duration</label><select id="authExpiry" style="width:100%;padding:10px 14px;background:var(--bg-input);border:1px solid var(--border-color);border-radius:8px;color:var(--text-primary);font-size:13px;"><option value="1">1 hour</option><option value="8">8 hours</option><option value="24" selected>24 hours</option><option value="168">7 days</option><option value="720">30 days</option></select></div><button class="btn btn-primary" style="width:100%;" onclick="submitAuthToken()">Unlock Dashboard</button>
     </div>
   </div>
 
@@ -2127,7 +2135,12 @@
     // API CONFIG REQUESTS
     async function refresh() {
       try {
-        const r = await fetch("/dashboard/data");
+        if (!adminToken) return;
+        const r = await fetch("/dashboard/data?api_key=" + encodeURIComponent(adminToken));
+        if (r.status === 401) {
+          showAuthOverlay();
+          return;
+        }
         if (!r.ok) throw new Error("HTTP " + r.status);
         
         currentData = await r.json();
@@ -2147,19 +2160,39 @@
     }
 
     function submitAuthToken() {
-      const tokVal = document.getElementById('authAdminToken').value.trim();
+      const tokVal = document.getElementById("authAdminToken").value.trim();
       if (!tokVal) {
         showToast("Please provide a valid token", "error");
         return;
       }
+      const expiryHours = parseInt(document.getElementById("authExpiry")?.value || "24");
+      const expiryTime = Date.now() + (expiryHours * 3600 * 1000);
       adminToken = tokVal;
-      localStorage.setItem('adminToken', adminToken);
+      localStorage.setItem("adminToken", adminToken);
+      localStorage.setItem("adminTokenExpiry", expiryTime.toString());
       hideAuthOverlay();
       refresh();
       if (!window.refreshInterval) {
-        window.refreshInterval = setInterval(refresh, 5000);
+        window.refreshInterval = setInterval(function() {
+          if (!checkTokenExpiry()) return;
+          refresh();
+        }, 5000);
       }
       updateTailscaleUI();
+      showToast("Dashboard unlocked for " + expiryHours + " hours", "success");
+    }
+
+    function checkTokenExpiry() {
+      const expiry = localStorage.getItem("adminTokenExpiry");
+      if (expiry && Date.now() > parseInt(expiry)) {
+        localStorage.removeItem("adminToken");
+        localStorage.removeItem("adminTokenExpiry");
+        adminToken = "";
+        showAuthOverlay();
+        showToast("Session expired. Please login again.", "error");
+        return false;
+      }
+      return true;
     }
 
     function lockAdminConsole() {
@@ -3784,13 +3817,16 @@
     // AUTO LOOP REFRESH
     let savedToken = localStorage.getItem('adminToken');
     if (!savedToken) {
-      adminToken = 'bypass';
-      localStorage.setItem('adminToken', adminToken);
+      adminToken = '';
+      showAuthOverlay();
     } else {
       adminToken = savedToken;
     }
     refresh();
-    window.refreshInterval = setInterval(refresh, 5000);
+    window.refreshInterval = setInterval(function() {
+        if (!checkTokenExpiry()) return;
+        refresh();
+      }, 5000);
     updateTailscaleUI();
 
     // Tunnel Management Functions

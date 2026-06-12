@@ -1,9 +1,10 @@
 // Package tokenpool implements round-robin selection of upstream Qwen tokens
-// with per-token cooldown after failure.
+// with per-token exponential backoff cooldown after failure.
 package tokenpool
 
 import (
 	"errors"
+	"math"
 	"sync"
 	"time"
 
@@ -13,31 +14,60 @@ import (
 // ErrNoToken is returned when no token is currently available.
 var ErrNoToken = errors.New("no Qwen token available")
 
+const (
+	maxCooldown = 10 * time.Minute
+	minCooldown = 5 * time.Second
+)
+
 type slot struct {
-	token       config.Token
-	cooldownEnd time.Time
-	hits        int64
-	failures    int64
+	token            config.Token
+	cooldownEnd      time.Time
+	consecutiveFails int
+	hits             int64
+	failures         int64
+}
+
+// effectiveCooldown returns the cooldown duration with exponential backoff.
+func (s *slot) effectiveCooldown(base time.Duration) time.Duration {
+	if s.consecutiveFails <= 1 {
+		return base
+	}
+	multiplier := math.Pow(2, float64(s.consecutiveFails-1))
+	cd := time.Duration(float64(base) * multiplier)
+	if cd > maxCooldown {
+		cd = maxCooldown
+	}
+	if cd < minCooldown {
+		cd = minCooldown
+	}
+	return cd
 }
 
 // Pool selects the next healthy token. Safe for concurrent use.
 type Pool struct {
-	mu       sync.Mutex
-	slots    []*slot
-	cursor   int
-	cooldown time.Duration
+	mu        sync.Mutex
+	slots     []*slot
+	slotIndex map[string]*slot // O(1) lookup by token value
+	cursor    int
+	cooldown  time.Duration
 }
 
 // New constructs a Pool from the given tokens.
 func New(tokens []config.Token, cooldown time.Duration) *Pool {
+	if cooldown < minCooldown {
+		cooldown = minCooldown
+	}
 	slots := make([]*slot, 0, len(tokens))
+	index := make(map[string]*slot, len(tokens))
 	for _, t := range tokens {
 		if t.Value == "" {
 			continue
 		}
-		slots = append(slots, &slot{token: t})
+		s := &slot{token: t}
+		slots = append(slots, s)
+		index[t.Value] = s
 	}
-	return &Pool{slots: slots, cooldown: cooldown}
+	return &Pool{slots: slots, slotIndex: index, cooldown: cooldown}
 }
 
 // SetTokens updates the active pool of tokens thread-safely.
@@ -46,27 +76,23 @@ func (p *Pool) SetTokens(tokens []config.Token) {
 	defer p.mu.Unlock()
 
 	newSlots := make([]*slot, 0, len(tokens))
+	newIndex := make(map[string]*slot, len(tokens))
 	for _, t := range tokens {
 		if t.Value == "" {
 			continue
 		}
-		// If token already exists in previous slots, keep its hits, failures, and cooldownEnd!
-		var existing *slot
-		for _, s := range p.slots {
-			if s.token.Value == t.Value {
-				existing = s
-				break
-			}
-		}
-		if existing != nil {
+		if existing, ok := p.slotIndex[t.Value]; ok {
 			existing.token.Name = t.Name
 			newSlots = append(newSlots, existing)
+			newIndex[t.Value] = existing
 		} else {
-			newSlots = append(newSlots, &slot{token: t})
+			s := &slot{token: t}
+			newSlots = append(newSlots, s)
+			newIndex[t.Value] = s
 		}
 	}
 	p.slots = newSlots
-	// Ensure cursor is within bounds
+	p.slotIndex = newIndex
 	if len(p.slots) > 0 {
 		p.cursor = p.cursor % len(p.slots)
 	} else {
@@ -103,17 +129,68 @@ func (p *Pool) Take() (config.Token, error) {
 	return config.Token{}, ErrNoToken
 }
 
-// MarkBad puts the given token on cooldown.
+// TakeWithWait tries to take a token, waiting up to maxWait if all tokens are
+// on cooldown. Returns ErrNoToken if no token becomes available within maxWait.
+func (p *Pool) TakeWithWait(maxWait time.Duration) (config.Token, error) {
+	deadline := time.Now().Add(maxWait)
+	for {
+		t, err := p.Take()
+		if err == nil {
+			return t, nil
+		}
+		p.mu.Lock()
+		earliest := p.earliestCooldownEnd()
+		p.mu.Unlock()
+		if earliest.IsZero() || earliest.After(deadline) {
+			return config.Token{}, ErrNoToken
+		}
+		wait := time.Until(earliest)
+		if wait <= 0 {
+			continue
+		}
+		if time.Now().Add(wait).After(deadline) {
+			wait = time.Until(deadline)
+		}
+		time.Sleep(wait)
+		if time.Now().After(deadline) {
+			return config.Token{}, ErrNoToken
+		}
+	}
+}
+
+// earliestCooldownEnd returns the earliest time a token will be available.
+// Caller must hold p.mu.
+func (p *Pool) earliestCooldownEnd() time.Time {
+	var earliest time.Time
+	now := time.Now()
+	for _, s := range p.slots {
+		if s.cooldownEnd.After(now) {
+			if earliest.IsZero() || s.cooldownEnd.Before(earliest) {
+				earliest = s.cooldownEnd
+			}
+		}
+	}
+	return earliest
+}
+
+// MarkBad puts the given token on cooldown with exponential backoff.
 func (p *Pool) MarkBad(token string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	end := time.Now().Add(p.cooldown)
-	for _, s := range p.slots {
-		if s.token.Value == token {
-			s.cooldownEnd = end
-			s.failures++
-			return
-		}
+	if s, ok := p.slotIndex[token]; ok {
+		s.consecutiveFails++
+		s.failures++
+		cd := s.effectiveCooldown(p.cooldown)
+		s.cooldownEnd = time.Now().Add(cd)
+	}
+}
+
+// MarkGood resets the consecutive failure count for a token (call on success).
+func (p *Pool) MarkGood(token string) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if s, ok := p.slotIndex[token]; ok {
+		s.consecutiveFails = 0
 	}
 }
 
@@ -122,24 +199,27 @@ func (p *Pool) MarkBad(token string) {
 func (p *Pool) Replace(oldValue, newValue string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	for _, s := range p.slots {
-		if s.token.Value == oldValue {
-			s.token.Value = newValue
-			s.cooldownEnd = time.Time{}
-			return true
-		}
+	if s, ok := p.slotIndex[oldValue]; ok {
+		delete(p.slotIndex, oldValue)
+		s.token.Value = newValue
+		s.cooldownEnd = time.Time{}
+		s.consecutiveFails = 0
+		p.slotIndex[newValue] = s
+		return true
 	}
 	return false
 }
 
 // Status describes one token's current state.
 type Status struct {
-	Name        string `json:"name,omitempty"`
-	Value       string `json:"value"`
-	OnCooldown  bool   `json:"on_cooldown"`
-	CooldownEnd int64  `json:"cooldown_end,omitempty"`
-	Hits        int64  `json:"hits"`
-	Failures    int64  `json:"failures"`
+	Name             string `json:"name,omitempty"`
+	Value            string `json:"value"`
+	OnCooldown       bool   `json:"on_cooldown"`
+	CooldownEnd      int64  `json:"cooldown_end,omitempty"`
+	CooldownRemains  int    `json:"cooldown_remains_sec,omitempty"`
+	ConsecutiveFails int    `json:"consecutive_fails,omitempty"`
+	Hits             int64  `json:"hits"`
+	Failures         int64  `json:"failures"`
 }
 
 // Statuses returns a snapshot of all tokens.
@@ -150,14 +230,16 @@ func (p *Pool) Statuses() []Status {
 	out := make([]Status, 0, len(p.slots))
 	for _, s := range p.slots {
 		st := Status{
-			Name:     s.token.Name,
-			Value:    s.token.Value,
-			Hits:     s.hits,
-			Failures: s.failures,
+			Name:             s.token.Name,
+			Value:            s.token.Value,
+			ConsecutiveFails: s.consecutiveFails,
+			Hits:             s.hits,
+			Failures:         s.failures,
 		}
 		if now.Before(s.cooldownEnd) {
 			st.OnCooldown = true
 			st.CooldownEnd = s.cooldownEnd.Unix()
+			st.CooldownRemains = int(time.Until(s.cooldownEnd).Seconds())
 		}
 		out = append(out, st)
 	}

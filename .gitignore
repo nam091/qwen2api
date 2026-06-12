@@ -1,30 +1,83 @@
+# =====================
 # Build artifacts
+# =====================
 /qwen2api
+/qwen2api.exe
 /dist/
+bin/
 *.exe
+*.exe~
 *.test
 *.out
 *.zip
-*.exe*
 qwen2api-linux*
+qwen2api.exe~
 
-
+# =====================
 # Local config / secrets
+# =====================
 config.json
 .env
 .env.local
+
+# =====================
+# IDE / Editor
+# =====================
 .claude/
-
-# Node helper deps
-scripts/node_modules/
-scripts/package-lock.json
-
-# IDE
 .idea/
 .vscode/
 *.swp
+*.swo
+*~
 .DS_Store
+Thumbs.db
 
-
-vercel.json
+# =====================
+# Logs
+# =====================
+*.log
 server.log
+qwen2api.log
+
+# =====================
+# Data / Database
+# =====================
+data/
+*.db
+*.db-journal
+*.db-wal
+
+# =====================
+# Node artifacts
+# =====================
+node_modules/
+package-lock.json
+package.json
+
+# =====================
+# Backup files
+# =====================
+*.bak
+*.bak.*
+*.old
+
+# =====================
+# Temp / Test artifacts
+# =====================
+history.txt
+*.tmp
+*.temp
+qwen_models_list.json
+
+# =====================
+# OS files
+# =====================
+desktop.ini
+ehthumbs.db
+ehthumbs_vista.db
+
+# =====================
+# Vercel
+# =====================
+vercel.json
+.vercel/

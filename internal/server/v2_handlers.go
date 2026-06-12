@@ -338,14 +338,65 @@ const dashboardHTML = `<!DOCTYPE html>
 <header><h1>qwen2api</h1><span>v2 dashboard</span><span id="uptime"></span></header>
 <main id="root">Loading…</main>
 <script>
+var refreshTimer = null;
+var loggedIn = false;
+
+function getApiKey() {
+  const params = new URLSearchParams(window.location.search);
+  const fromUrl = params.get("api_key") || params.get("token") || "";
+  if (fromUrl) {
+    localStorage.setItem("qwen2api_admin_token", fromUrl);
+    return fromUrl;
+  }
+  return localStorage.getItem("qwen2api_admin_token") || "";
+}
+
+function setApiKey(token) {
+  if (!token) return;
+  localStorage.setItem("qwen2api_admin_token", token);
+  loggedIn = false;
+  refresh();
+}
+
+function showLogin() {
+  if (refreshTimer) { clearInterval(refreshTimer); refreshTimer = null; }
+  document.getElementById("root").innerHTML =
+    "<div class='card'>" +
+    "<h2>Admin Login</h2>" +
+    "<p style='margin:0 0 12px 0;font-size:13px;color:#94a3b8'>Enter admin token to access dashboard</p>" +
+    "<div style='display:flex;gap:8px'>" +
+    "<input id='tokenInput' type='password' placeholder='Admin token' style='flex:1;padding:10px 14px;border-radius:6px;border:1px solid #334155;background:#0f172a;color:#e2e8f0;font-size:14px'>" +
+    "<button onclick='setApiKey(document.getElementById(\"tokenInput\").value)' style='padding:10px 20px;background:#E56A4A;color:#fff;border:none;border-radius:6px;font-size:14px;font-weight:600;cursor:pointer'>Login</button>" +
+    "</div>" +
+    "</div>";
+  document.getElementById("tokenInput").focus();
+}
+
 async function refresh() {
+  const apiKey = getApiKey();
+  if (!apiKey) {
+    showLogin();
+    return;
+  }
   try {
-    const params = new URLSearchParams(window.location.search);
-    const apiKey = params.get("api_key") || params.get("token") || "";
-    const url = "/dashboard/data" + (apiKey ? "?api_key=" + encodeURIComponent(apiKey) : "");
+    const url = "/dashboard/data?api_key=" + encodeURIComponent(apiKey);
     const r = await fetch(url);
+    if (r.status === 401) {
+      localStorage.removeItem("qwen2api_admin_token");
+      showLogin();
+      return;
+    }
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
+    loggedIn = true;
+    render(d);
+    if (!refreshTimer) {
+      refreshTimer = setInterval(refresh, 5000);
+    }
+  } catch (e) {
+    document.getElementById("root").innerHTML = "<div class='card err'>Failed to load: " + e.message + "</div>";
+  }
+}
     render(d);
   } catch (e) {
     document.getElementById("root").innerHTML = "<div class='card err'>Failed to load: " + e.message + "</div>";
@@ -526,10 +577,4 @@ func (h *handlers) shutdownServer(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 }
-
-// noopFlusher is a no-op implementation of http.Flusher for environments
-// that don't support streaming (e.g., some proxy configurations).
-type noopFlusher struct{}
-
-func (f *noopFlusher) Flush() {}
 

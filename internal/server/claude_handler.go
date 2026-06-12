@@ -20,6 +20,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/qwen"
 	"github.com/keaume34/qwen2api/internal/session"
 	"github.com/keaume34/qwen2api/internal/toolcall"
+	"github.com/keaume34/qwen2api/internal/toolname"
 )
 
 // bufferTokens is added to input_tokens in responses so clients auto-compact
@@ -31,6 +32,12 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		_ = r.Body.Close()
 	}()
+
+	// Rate limit: wait for a slot to prevent overwhelming upstream
+	if h.rateLimiter != nil {
+		release := h.rateLimiter.Acquire()
+		defer release()
+	}
 
 	var req claude.MessagesRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -61,6 +68,24 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 
 	// Resolve model alias
 	oaiReq.Model = h.deps.Config.ResolveModel(oaiReq.Model)
+
+	// Claude Code optimization: extract only new content when client is
+	// Claude Code and the feature is enabled. This reduces upstream token
+	// usage by 50-80% for long conversations.
+	clientType := DetectClient(r)
+	if h.claudeCodeOpt.ShouldOptimize(clientType, "") {
+		optimized := h.claudeCodeOpt.ExtractNewContent(oaiReq.Messages)
+		if optimized != collapseMessages(oaiReq.Messages) {
+			h.deps.Logger.Debug("claude code optimization applied",
+				"client", clientType,
+				"messages_before", len(oaiReq.Messages),
+			)
+			oaiReq.Messages = []openai.ChatMessage{{
+				Role:    "user",
+				Content: jsonStringRaw(optimized),
+			}}
+		}
+	}
 
 	// Auto-compact: if messages exceed context window threshold, compact them
 	if h.deps.Config.Session.ContextWindowTokens > 0 {
@@ -264,6 +289,7 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 		h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusBadGateway, time.Since(start), false, retries, fmt.Errorf("all retries exhausted"))
 		return
 	}
+	h.deps.TokenPool.MarkGood(token.Value)
 	defer func() { _ = body.Close() }()
 
 	hasTools := len(req.Tools) > 0
@@ -303,9 +329,9 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 				baseReq: upstreamReq,
 			}
 		}
-		h.streamClaudeResponse(r.Context(), w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing, inputTokensFallback, cont)
+		h.streamClaudeResponse(r.Context(), w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing, inputTokensFallback, cont, req.Tools)
 	} else {
-		h.aggregateClaudeResponse(w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing, inputTokensFallback)
+		h.aggregateClaudeResponse(w, body, req.Model, msgID, hasTools, h.deps.Config.Features.MultiFormatToolParsing, inputTokensFallback, req.Tools)
 	}
 	h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 	h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
@@ -313,7 +339,7 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 
 // streamClaudeResponse reads raw Qwen SSE, applies thinking wrapping and tool
 // detection, and emits a well-formed Claude Messages SSE stream.
-func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool, inputTokensFallback int, cont toolcall.Continuer) {
+func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool, inputTokensFallback int, cont toolcall.Continuer, claudeTools []claude.Tool) {
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")
@@ -538,6 +564,29 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 
 	if hasTools {
 		result := toolcall.ParseWithFormats(accumulated, multiFormat)
+		// Validate tool names against client's tool definitions
+		if len(result.ToolCalls) > 0 && len(claudeTools) > 0 {
+			validNames := make(map[string]bool, len(claudeTools))
+			for _, t := range claudeTools {
+				validNames[t.Name] = true
+			}
+			filtered := make([]openai.ToolCall, 0, len(result.ToolCalls))
+			for _, tc := range result.ToolCalls {
+				name := tc.Function.Name
+				// Try exact match
+				if validNames[name] {
+					filtered = append(filtered, tc)
+					continue
+				}
+				// Try deobfuscated name
+				deobfuscated := toolname.FromQwen(name)
+				if deobfuscated != name && validNames[deobfuscated] {
+					tc.Function.Name = deobfuscated
+					filtered = append(filtered, tc)
+				}
+			}
+			result.ToolCalls = filtered
+		}
 		if len(result.ToolCalls) > 0 {
 			stopReason = "tool_use"
 			cleanText := strings.TrimSpace(result.Content)
@@ -640,7 +689,7 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 
 // aggregateClaudeResponse reads the full Qwen stream and returns a single
 // Claude MessagesResponse JSON envelope.
-func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool, inputTokensFallback int) {
+func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCloser, model, msgID string, hasTools, multiFormat bool, inputTokensFallback int, claudeTools []claude.Tool) {
 	reader := qwen.NewStreamReader(body)
 	var content strings.Builder
 	var thinkingContent strings.Builder
@@ -714,6 +763,29 @@ func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCl
 
 	if hasTools {
 		result := toolcall.ParseWithFormats(full, multiFormat)
+		// Validate tool names against client's tool definitions
+		if len(result.ToolCalls) > 0 && len(claudeTools) > 0 {
+			validNames := make(map[string]bool, len(claudeTools))
+			for _, t := range claudeTools {
+				validNames[t.Name] = true
+			}
+			filtered := make([]openai.ToolCall, 0, len(result.ToolCalls))
+			for _, tc := range result.ToolCalls {
+				name := tc.Function.Name
+				// Try exact match
+				if validNames[name] {
+					filtered = append(filtered, tc)
+					continue
+				}
+				// Try deobfuscated name
+				deobfuscated := toolname.FromQwen(name)
+				if deobfuscated != name && validNames[deobfuscated] {
+					tc.Function.Name = deobfuscated
+					filtered = append(filtered, tc)
+				}
+			}
+			result.ToolCalls = filtered
+		}
 		if len(result.ToolCalls) > 0 {
 			stopReason = "tool_use"
 			if strings.TrimSpace(result.Content) != "" {

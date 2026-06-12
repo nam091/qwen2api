@@ -3,6 +3,7 @@ package qwen
 import (
 	"context"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,7 +23,7 @@ func TestModelsWithoutFallback(t *testing.T) {
 		BaseURL:                upstream.URL,
 		TimeoutSeconds:         10,
 		BrowserFallbackEnabled: false,
-	})
+	}, slog.Default())
 
 	_, err := client.Models(context.Background(), "test-token")
 	if err == nil {
@@ -44,7 +45,7 @@ func TestModelsWithFallbackButNoAntiBot(t *testing.T) {
 		BaseURL:                upstream.URL,
 		TimeoutSeconds:         10,
 		BrowserFallbackEnabled: true,
-	})
+	}, slog.Default())
 
 	resp, err := client.Models(context.Background(), "test-token")
 	if err != nil {
@@ -66,7 +67,7 @@ func TestNewChatWithoutFallback(t *testing.T) {
 		BaseURL:                upstream.URL,
 		TimeoutSeconds:         10,
 		BrowserFallbackEnabled: false,
-	})
+	}, slog.Default())
 
 	_, err := client.NewChat(context.Background(), "test-token", "qwen3-max", "chat")
 	if err == nil {
@@ -88,7 +89,7 @@ func TestNewChatWithFallbackButNoAntiBot(t *testing.T) {
 		BaseURL:                upstream.URL,
 		TimeoutSeconds:         10,
 		BrowserFallbackEnabled: true,
-	})
+	}, slog.Default())
 
 	chatID, err := client.NewChat(context.Background(), "test-token", "qwen3-max", "chat")
 	if err != nil {
@@ -110,7 +111,7 @@ func TestCompletionsWithoutFallback(t *testing.T) {
 		BaseURL:                upstream.URL,
 		TimeoutSeconds:         10,
 		BrowserFallbackEnabled: false,
-	})
+	}, slog.Default())
 
 	req := CompletionRequest{
 		Model:    "qwen3-max",
@@ -138,7 +139,7 @@ func TestCompletionsWithFallbackButNoAntiBot(t *testing.T) {
 		BaseURL:                upstream.URL,
 		TimeoutSeconds:         10,
 		BrowserFallbackEnabled: true,
-	})
+	}, slog.Default())
 
 	req := CompletionRequest{
 		Model:    "qwen3-max",
@@ -207,7 +208,7 @@ func TestFallbackWithDynamicConfig(t *testing.T) {
 		BaseURL:                upstream.URL,
 		TimeoutSeconds:         10,
 		BrowserFallbackEnabled: false, // static config says false
-	})
+	}, slog.Default())
 	client.SetConfigRef(&cfg) // but dynamic config says true
 
 	// Should use dynamic config value (true)

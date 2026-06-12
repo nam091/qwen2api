@@ -24,6 +24,11 @@ var RefusalPatterns = []string{
 	"auto_agent_blocked",
 	"Tool does not exist",
 	"Tool X does not exist",
+	"does not exists",
+	"does not exist",
+	"not available",
+	"not found",
+	"unknown tool",
 }
 
 // BlockedResponse indicates Qwen blocked the tool call.
@@ -145,4 +150,38 @@ func Sanitize(calls []openai.ToolCall) ([]openai.ToolCall, bool) {
 	calls = FilterDuplicates(calls)
 	filtered := original - len(calls)
 	return calls, filtered > 0
+}
+
+// StripToolErrorMessages removes tool-related error messages from response text.
+// When the model generates both tool calls and error messages about non-existent
+// tools, this function strips the error messages while keeping the useful content.
+func StripToolErrorMessages(text string) string {
+	lines := strings.Split(text, "\n")
+	var result []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			result = append(result, line)
+			continue
+		}
+		// Skip lines that are tool error messages
+		isError := false
+		for _, pattern := range RefusalPatterns {
+			if strings.Contains(strings.ToLower(trimmed), strings.ToLower(pattern)) {
+				isError = true
+				break
+			}
+		}
+		// Also skip lines that look like "Tool X does not exists"
+		if strings.Contains(strings.ToLower(trimmed), "tool") && 
+		   (strings.Contains(strings.ToLower(trimmed), "does not") || 
+		    strings.Contains(strings.ToLower(trimmed), "not available") ||
+		    strings.Contains(strings.ToLower(trimmed), "not found")) {
+			isError = true
+		}
+		if !isError {
+			result = append(result, line)
+		}
+	}
+	return strings.Join(result, "\n")
 }

@@ -1,2 +1,0 @@
-time=2026-05-22T16:30:42.506+07:00 level=INFO msg="qwen2api listening" addr=:15001 tokens=2 api_keys=1
-qwen2api: listen tcp :15001: bind: Only one usage of each socket address (protocol/network address/port) is normally permitted.

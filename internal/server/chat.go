@@ -19,6 +19,7 @@ import (
 	"github.com/keaume34/qwen2api/internal/affinity"
 	"github.com/keaume34/qwen2api/internal/config"
 	"github.com/keaume34/qwen2api/internal/filecache"
+	"github.com/keaume34/qwen2api/internal/hallucination"
 	"github.com/keaume34/qwen2api/internal/openai"
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
@@ -33,6 +34,13 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	defer func() {
 		_ = r.Body.Close()
 	}()
+
+	// Rate limit: wait for a slot to prevent overwhelming upstream
+	if h.rateLimiter != nil {
+		release := h.rateLimiter.Acquire()
+		defer release()
+	}
+
 	var req openai.ChatRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid_request_error", "invalid JSON body: "+err.Error())
@@ -381,6 +389,7 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, errors.New(msg))
 		return
 	}
+	h.deps.TokenPool.MarkGood(token.Value)
 	completionID := "chatcmpl-" + uuid.NewString()
 	created := unixNow()
 	hasTools := len(req.Tools) > 0
@@ -411,7 +420,7 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				baseReq: upstreamReq,
 			}
 		}
-		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools, inputTokensFallback, cont)
+		h.proxyStream(r.Context(), w, body, completionID, created, req.Model, hasTools, inputTokensFallback, cont, req.Tools, cacheKey)
 		h.metricsObserve("qwen2api_request_duration_seconds", time.Since(start).Seconds())
 		h.logRequest(r, req, token.Value, http.StatusOK, time.Since(start), cacheHit, retries, nil)
 		// Store session messages after streaming (we don't have the response text,
@@ -455,6 +464,20 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadGateway, "upstream_error", "tool call response appears truncated after retries")
 			h.logRequest(r, req, token.Value, http.StatusBadGateway, time.Since(start), cacheHit, retries, errors.New("truncated tool call after retries"))
 			return
+		}
+	}
+
+	// Validate tool names against client's tool definitions
+	if hasTools && len(resp.Choices) > 0 && len(resp.Choices[0].Message.ToolCalls) > 0 && len(req.Tools) > 0 {
+		resp.Choices[0].Message.ToolCalls = toolcall.ValidateToolNames(resp.Choices[0].Message.ToolCalls, req.Tools)
+		if len(resp.Choices[0].Message.ToolCalls) == 0 {
+			// All tool calls were hallucinated - strip tool tags and error messages
+			resp.Choices[0].FinishReason = "stop"
+			if resp.Choices[0].Message.Content != nil {
+				clean := toolcall.StripOrphanToolCallBlocks(*resp.Choices[0].Message.Content)
+				clean = hallucination.StripToolErrorMessages(clean)
+				resp.Choices[0].Message.Content = &clean
+			}
 		}
 	}
 
@@ -512,7 +535,10 @@ func (h *handlers) logRequestEndpoint(r *http.Request, req openai.ChatRequest, e
 func shouldRetry(err error) bool {
 	var ue *qwen.UpstreamError
 	if errors.As(err, &ue) {
-		return ue.Status == http.StatusUnauthorized || ue.Status == http.StatusForbidden || ue.Status == http.StatusTooManyRequests
+		return ue.Status == http.StatusUnauthorized ||
+			ue.Status == http.StatusForbidden ||
+			ue.Status == http.StatusTooManyRequests ||
+			ue.IsRateLimit()
 	}
 	return false
 }
@@ -538,8 +564,11 @@ func (h *handlers) handleUpstreamFailure(w http.ResponseWriter, token string, er
 	var upstream *qwen.UpstreamError
 	if errors.As(err, &upstream) {
 		h.deps.Logger.Warn("upstream error", "action", action, "status", upstream.Status, "body", truncate(upstream.Body, 256))
-		if upstream.Status == http.StatusUnauthorized || upstream.Status == http.StatusForbidden {
+		if upstream.Status == http.StatusUnauthorized || upstream.Status == http.StatusForbidden || upstream.IsRateLimit() {
 			h.deps.TokenPool.MarkBad(token)
+			if upstream.IsRateLimit() {
+				h.deps.Logger.Warn("rate limited by upstream", "action", action, "token", truncate(token, 20))
+			}
 		}
 
 		// Track error if tracker is available
@@ -780,12 +809,9 @@ func lookupConvKeyCached(model string, msgs []openai.ChatMessage, fullCollapsed 
 	if len(prefix) == 0 {
 		return ""
 	}
-	// If dropping the last 2 messages leaves the same set as what produced
-	// fullCollapsed (i.e. the trailing assistant+user contributed nothing
-	// meaningful), reuse it. Otherwise fall back to recomputing.
-	if len(prefix) == len(msgs)-2 && len(msgs) == 1 {
-		return promptcache.Key(model, fullCollapsed)
-	}
+	// fullCollapsed was computed from the FULL message slice (including
+	// the trailing assistant+user). The prefix is msgs[:-2], so we must
+	// always recompute — fullCollapsed is NOT the prefix hash.
 	return promptcache.Key(model, collapseMessages(prefix))
 }
 
@@ -1055,9 +1081,9 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 }
 
 // proxyStream re-emits upstream events as OpenAI-style SSE chunks.
-func (h *handlers) proxyStream(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool, inputTokensFallback int, cont toolcall.Continuer) {
+func (h *handlers) proxyStream(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool, inputTokensFallback int, cont toolcall.Continuer, clientTools []openai.Tool, cacheKey string) {
 	if hasTools {
-		h.proxyStreamWithToolDetection(ctx, w, body, id, created, model, inputTokensFallback, cont)
+		h.proxyStreamWithToolDetection(ctx, w, body, id, created, model, inputTokensFallback, cont, clientTools, cacheKey)
 		return
 	}
 	h.proxyStreamDirect(ctx, w, body, id, created, model, inputTokensFallback)
@@ -1086,14 +1112,18 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 		}
 	}
 
+	// Pre-allocate SSE prefix/suffix to avoid repeated []byte allocations
+	ssePrefix := []byte("data: ")
+	sseSuffix := []byte("\n\n")
+
 	emit := func(chunk openai.StreamChunk) {
 		raw, err := marshalStreamChunk(chunk)
 		if err != nil {
 			return
 		}
-		_, _ = w.Write([]byte("data: "))
+		_, _ = w.Write(ssePrefix)
 		_, _ = w.Write(raw)
-		_, _ = w.Write([]byte("\n\n"))
+		_, _ = w.Write(sseSuffix)
 		flush()
 	}
 
@@ -1250,7 +1280,7 @@ func (h *handlers) proxyStreamDirect(ctx context.Context, w http.ResponseWriter,
 // proxyStreamWithToolDetection buffers the stream to detect <tool_call> blocks.
 // Content before the first <tool_call> is streamed normally. Once detected,
 // the remainder is buffered and tool calls are emitted as structured deltas.
-func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, inputTokensFallback int, cont toolcall.Continuer) {
+func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.ResponseWriter, body io.Reader, id string, created int64, model string, inputTokensFallback int, cont toolcall.Continuer, clientTools []openai.Tool, cacheKey string) {
 	flusher, _ := w.(http.Flusher)
 	w.Header().Set("Content-Type", "text/event-stream; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-cache")
@@ -1261,6 +1291,7 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 	reader := qwen.NewStreamReader(body)
 	inThinking := false
 	var fullContent strings.Builder
+	var contentBuf []byte // incremental buffer to avoid repeated String() calls
 	var emittedLen int
 	var reasoningLen int
 	var upstreamInputTokens, upstreamOutputTokens int
@@ -1274,14 +1305,18 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 		}
 	}
 
+	// Pre-allocate SSE prefix/suffix to avoid repeated []byte allocations
+	ssePrefix := []byte("data: ")
+	sseSuffix := []byte("\n\n")
+
 	emit := func(chunk openai.StreamChunk) {
 		raw, err := marshalStreamChunk(chunk)
 		if err != nil {
 			return
 		}
-		_, _ = w.Write([]byte("data: "))
+		_, _ = w.Write(ssePrefix)
 		_, _ = w.Write(raw)
-		_, _ = w.Write([]byte("\n\n"))
+		_, _ = w.Write(sseSuffix)
 		flush()
 	}
 
@@ -1336,43 +1371,44 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			text, next := wrapThinking(rawContent, phase, inThinking)
 			inThinking = next
 			fullContent.WriteString(text)
+			contentBuf = append(contentBuf, text...)
 
 			if triggered {
 				return nil
 			}
-			// Optimized: only check for tool call when we have enough new content
-			// This reduces String() calls from O(n) to O(n/markerLen) where n is total content length
-			const markerLen = len("<tool_call")
-			currentLen := fullContent.Len()
-			if currentLen >= markerLen {
-				// Only check if we've accumulated at least markerLen new bytes since last emission
-				if currentLen-emittedLen >= markerLen {
-					accumulated := fullContent.String()
-					if strings.Contains(accumulated, "<tool_call") {
-						triggered = true
-						return nil
+			// Check for tool call marker in the new bytes only (not the entire string)
+			const marker = "<tool_call"
+			const markerLen = len(marker)
+			if len(contentBuf) >= markerLen {
+				// Check only the new portion + overlap for split markers
+				checkFrom := len(contentBuf) - len(text) - markerLen
+				if checkFrom < 0 {
+					checkFrom = 0
+				}
+				if bytes.Contains(contentBuf[checkFrom:], []byte(marker)) {
+					triggered = true
+					return nil
+				}
+				// Stream safe content (everything except the last markerLen bytes)
+				safe := len(contentBuf) - markerLen
+				for safe > emittedLen && !utf8.RuneStart(contentBuf[safe]) {
+					safe--
+				}
+				if safe > emittedLen {
+					chunk := string(contentBuf[emittedLen:safe])
+					role := ""
+					if !roleSent {
+						role = "assistant"
+						roleSent = true
 					}
-					// Stream safe content (everything except the last markerLen bytes)
-					safe := len(accumulated) - markerLen
-					for safe > emittedLen && !utf8.RuneStart(accumulated[safe]) {
-						safe--
-					}
-					if safe > emittedLen {
-						chunk := accumulated[emittedLen:safe]
-						role := ""
-						if !roleSent {
-							role = "assistant"
-							roleSent = true
-						}
-						emit(openai.StreamChunk{
-							ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
-							Choices: []openai.StreamChoice{{
-								Index: 0,
-								Delta: openai.Delta{Role: role, Content: chunk},
-							}},
-						})
-						emittedLen = safe
-					}
+					emit(openai.StreamChunk{
+						ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+						Choices: []openai.StreamChoice{{
+							Index: 0,
+							Delta: openai.Delta{Role: role, Content: chunk},
+						}},
+					})
+					emittedLen = safe
 				}
 			}
 			return nil
@@ -1395,6 +1431,54 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 	accumulated := fullContent.String()
 	result := toolcall.ParseWithFormats(accumulated, h.deps.Config.Features.MultiFormatToolParsing)
 
+	// If the stream was truncated mid-tool-call, the continuation mechanism
+	// often produces malformed output. Instead, invalidate the cache and
+	// signal truncation so the client can retry with a fresh chat_id.
+	if truncated && toolcall.HasUnclosedToolCall(accumulated) {
+		h.deps.Logger.Warn("stream truncated mid-tool-call; retrying with fresh chat_id",
+			"model", model, "accumulated_len", len(accumulated))
+		// Invalidate cache so next attempt gets a fresh chat_id
+		if cacheKey != "" {
+			h.deps.Cache.Invalidate(cacheKey)
+		}
+		// Signal truncation to client - they will retry
+		finish := "length"
+		outputTokens := approxTokens(accumulated)
+		promptTokens := inputTokensFallback
+		if hasUpstreamUsage {
+			promptTokens = upstreamInputTokens
+			outputTokens = upstreamOutputTokens
+		}
+		// Emit any content we have so far
+		if len(accumulated) > emittedLen {
+			unsent := accumulated[emittedLen:]
+			role := ""
+			if !roleSent {
+				role = "assistant"
+				roleSent = true
+			}
+			emit(openai.StreamChunk{
+				ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+				Choices: []openai.StreamChoice{{
+					Index: 0,
+					Delta: openai.Delta{Role: role, Content: unsent},
+				}},
+			})
+		}
+		emit(openai.StreamChunk{
+			ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+			Choices: []openai.StreamChoice{{Index: 0, Delta: openai.Delta{}, FinishReason: &finish}},
+			Usage: &openai.Usage{
+				PromptTokens:     promptTokens + bufferTokens,
+				CompletionTokens: outputTokens,
+				TotalTokens:      promptTokens + outputTokens + bufferTokens,
+			},
+		})
+		fmt.Fprint(w, "data: [DONE]\n\n")
+		flush()
+		return
+	}
+
 	// Nếu có dấu hiệu bị cắt mà chưa ra tool call → thử xin model viết tiếp.
 	if cont != nil &&
 		(toolcall.HasUnclosedToolCall(accumulated) ||
@@ -1403,6 +1487,39 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			ctx, accumulated, h.deps.Config.Features.MultiFormatToolParsing, cont,
 		); ok && len(res.ToolCalls) > 0 {
 			result = res
+		}
+	}
+
+	// Validate tool names against client's tool definitions to prevent
+	// hallucinated tool names from causing "tool_not_exist" errors.
+	if len(result.ToolCalls) > 0 && len(clientTools) > 0 {
+		result.ToolCalls = toolcall.ValidateToolNames(result.ToolCalls, clientTools)
+	}
+
+	// Try to fix malformed tool calls by sending them back to Qwen.
+	// Only send the broken call, not the entire history.
+	if cont != nil && len(result.ToolCalls) > 0 {
+		result.ToolCalls = toolcall.FixMalformedToolCalls(ctx, result.ToolCalls, accumulated, clientTools, cont)
+	}
+
+	// If all tool calls were hallucinated and filtered out, treat as normal text.
+	// Strip any orphan <tool_call> tags and tool error messages from the content.
+	if triggered && len(result.ToolCalls) == 0 {
+		cleanText := toolcall.StripOrphanToolCallBlocks(accumulated)
+		cleanText = hallucination.StripToolErrorMessages(cleanText)
+		if cleanText != "" {
+			role := ""
+			if !roleSent {
+				role = "assistant"
+				roleSent = true
+			}
+			emit(openai.StreamChunk{
+				ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+				Choices: []openai.StreamChoice{{
+					Index: 0,
+					Delta: openai.Delta{Role: role, Content: cleanText},
+				}},
+			})
 		}
 	}
 
@@ -1603,84 +1720,6 @@ func wrapThinking(content, phase string, inThinking bool) (string, bool) {
 	default:
 		return content, inThinking
 	}
-}
-
-// aggregateStream consumes the upstream stream and returns a single
-// chat.completion JSON envelope (for non-stream client requests).
-func (h *handlers) aggregateStream(w http.ResponseWriter, body io.Reader, id string, created int64, model string, hasTools bool) {
-	reader := qwen.NewStreamReader(body)
-	var content strings.Builder
-	inThinking := false
-	finishReason := "stop"
-
-	for {
-		evt, err := reader.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			h.deps.Logger.Warn("stream read error", "err", err)
-			break
-		}
-		if evt.Done {
-			break
-		}
-		if evt.Delta == nil || len(evt.Delta.Choices) == 0 {
-			continue
-		}
-		choice := evt.Delta.Choices[0]
-		text, next := wrapThinking(choice.Delta.Content, choice.Delta.Phase, inThinking)
-		inThinking = next
-		content.WriteString(text)
-		if choice.FinishReason != nil {
-			finishReason = *choice.FinishReason
-		}
-	}
-	if inThinking {
-		content.WriteString("</think>")
-	}
-
-	fullContent := content.String()
-
-	if hasTools {
-		result := toolcall.ParseWithFormats(fullContent, h.deps.Config.Features.MultiFormatToolParsing)
-		if len(result.ToolCalls) > 0 {
-			var contentPtr *string
-			if strings.TrimSpace(result.Content) != "" {
-				contentPtr = strPtr(result.Content)
-			}
-			resp := openai.ChatCompletion{
-				ID:      id,
-				Object:  "chat.completion",
-				Created: created,
-				Model:   model,
-				Choices: []openai.Choice{{
-					Index: 0,
-					Message: openai.ChatMessageOut{
-						Role:      "assistant",
-						Content:   contentPtr,
-						ToolCalls: result.ToolCalls,
-					},
-					FinishReason: "tool_calls",
-				}},
-			}
-			writeJSON(w, http.StatusOK, resp)
-			return
-		}
-	}
-
-	resp := openai.ChatCompletion{
-		ID:      id,
-		Object:  "chat.completion",
-		Created: created,
-		Model:   model,
-		Choices: []openai.Choice{{
-			Index:        0,
-			Message:      openai.ChatMessageOut{Role: "assistant", Content: strPtr(fullContent)},
-			FinishReason: finishReason,
-		}},
-	}
-	writeJSON(w, http.StatusOK, resp)
 }
 
 var fileBlockRe = regexp.MustCompile(`<file\s+path=["']?([^"'>\s]+)["']?>([\s\S]*?)</file>`)

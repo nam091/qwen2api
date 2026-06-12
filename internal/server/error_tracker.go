@@ -82,8 +82,8 @@ func (et *ErrorTracker) Track(entry ErrorEntry) {
 		"duration_ms", entry.Duration,
 	)
 
-	// Persist to file asynchronously
-	go et.persist()
+	// Persist to file asynchronously (snapshot data under lock, write outside)
+	go et.persistAsync()
 }
 
 // GetRecentErrors returns the most recent errors
@@ -161,10 +161,9 @@ func (et *ErrorTracker) GetErrorStats() map[string]interface{} {
 // Clear removes all tracked errors
 func (et *ErrorTracker) Clear() {
 	et.mu.Lock()
-	defer et.mu.Unlock()
-
 	et.errors = nil
-	et.persist()
+	et.persistLocked()
+	et.mu.Unlock()
 }
 
 // load reads errors from file
@@ -180,11 +179,26 @@ func (et *ErrorTracker) load() error {
 	return json.Unmarshal(data, &et.errors)
 }
 
-// persist writes errors to file
-func (et *ErrorTracker) persist() {
+// persistAsync snapshots the error list under lock then writes to disk without holding the lock.
+func (et *ErrorTracker) persistAsync() {
 	et.mu.Lock()
-	defer et.mu.Unlock()
+	snapshot := make([]ErrorEntry, len(et.errors))
+	copy(snapshot, et.errors)
+	et.mu.Unlock()
 
+	data, err := json.MarshalIndent(snapshot, "", "  ")
+	if err != nil {
+		et.logger.Error("failed to marshal errors", "error", err.Error())
+		return
+	}
+
+	if err := os.WriteFile(et.filePath, data, 0644); err != nil {
+		et.logger.Error("failed to write errors file", "error", err.Error())
+	}
+}
+
+// persistLocked writes errors to file. Caller MUST hold et.mu.
+func (et *ErrorTracker) persistLocked() {
 	data, err := json.MarshalIndent(et.errors, "", "  ")
 	if err != nil {
 		et.logger.Error("failed to marshal errors", "error", err.Error())
@@ -215,6 +229,6 @@ func (et *ErrorTracker) CleanupOldErrors(maxAge time.Duration) {
 
 	if removed > 0 {
 		et.logger.Info("cleaned up old errors", "removed", removed, "remaining", len(cleaned))
-		go et.persist()
+		et.persistLocked()
 	}
 }

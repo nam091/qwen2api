@@ -15,7 +15,8 @@ import (
 // DefaultStreamReadTimeout is the maximum time to wait for data between
 // SSE events. If the upstream stalls (keeps TCP open but sends nothing),
 // this prevents goroutines from hanging indefinitely.
-const DefaultStreamReadTimeout = 90 * time.Second
+// Increased to 180s to handle long-running tool calls and thinking phases.
+const DefaultStreamReadTimeout = 180 * time.Second
 
 // deadlineReader wraps an io.Reader and sets a per-read deadline on the
 // underlying net.Conn (if available). This ensures that stalled streams

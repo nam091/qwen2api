@@ -89,7 +89,7 @@ func ParseWithFormats(text string, multiFormat bool) ParseResult {
 		moreCalls, c := parseHybridToolCallBlocks(content)
 		calls = append(calls, moreCalls...)
 		content = c
-		content = stripOrphanToolCallBlocks(content)
+		content = StripOrphanToolCallBlocks(content)
 		// Apply hallucination protection
 		calls, _ = hallucination.Sanitize(calls)
 		return ParseResult{Content: strings.TrimSpace(content), ToolCalls: calls}
@@ -109,7 +109,7 @@ func ParseWithFormats(text string, multiFormat bool) ParseResult {
 
 	// Safety net: any remaining unparsed <tool_call> blocks shouldn't leak
 	// into the displayed text (codex / claude-code render them as garbage).
-	content = stripOrphanToolCallBlocks(content)
+	content = StripOrphanToolCallBlocks(content)
 
 	// Apply hallucination protection: remove invalid/duplicate calls
 	calls, _ = hallucination.Sanitize(calls)
@@ -331,11 +331,11 @@ func parseHybrid(inner string) (openai.ToolCall, bool) {
 	}, true
 }
 
-// stripOrphanToolCallBlocks removes any leftover <tool_call>...</tool_call>
+// StripOrphanToolCallBlocks removes any leftover <tool_call>...</tool_call>
 // blocks from text after all parsers have run. This is a safety net for
 // malformed blocks whose inner JSON could not be parsed or repaired —
 // rendering the raw block to the client is always worse than dropping it.
-func stripOrphanToolCallBlocks(text string) string {
+func StripOrphanToolCallBlocks(text string) string {
 	text = reToolCallBlock.ReplaceAllString(text, "")
 	text = reHybridToolCallBlock.ReplaceAllString(text, "")
 	return text
@@ -435,4 +435,41 @@ func SawToolMarker(s string) bool {
 	return strings.Contains(s, "<tool_call>") ||
 		strings.Contains(s, "<function_calls>") ||
 		strings.Contains(s, "<invoke")
+}
+
+// ValidateToolNames filters tool calls to only include those whose names
+// match a client-defined tool. This prevents Qwen-hallucinated tool names
+// (which cause "tool_not_exist" errors on the client) from being returned.
+// It also handles obfuscated names (e.g. u_shell_command → shell_command).
+func ValidateToolNames(calls []openai.ToolCall, clientTools []openai.Tool) []openai.ToolCall {
+	if len(clientTools) == 0 || len(calls) == 0 {
+		return calls
+	}
+	validNames := make(map[string]bool, len(clientTools))
+	for _, t := range clientTools {
+		validNames[t.Function.Name] = true
+	}
+	filtered := make([]openai.ToolCall, 0, len(calls))
+	for _, call := range calls {
+		name := call.Function.Name
+		// Try exact match first
+		if validNames[name] {
+			filtered = append(filtered, call)
+			continue
+		}
+		// Try deobfuscated name (strip u_ prefix if present)
+		deobfuscated := toolname.FromQwen(name)
+		if deobfuscated != name && validNames[deobfuscated] {
+			call.Function.Name = deobfuscated
+			filtered = append(filtered, call)
+			continue
+		}
+		// Try obfuscated name (add u_ prefix)
+		obfuscated := toolname.ToQwen(name)
+		if obfuscated != name && validNames[obfuscated] {
+			filtered = append(filtered, call)
+			continue
+		}
+	}
+	return filtered
 }

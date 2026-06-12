@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/keaume34/qwen2api/internal/openai"
@@ -11,11 +12,48 @@ import (
 	"github.com/keaume34/qwen2api/internal/session"
 )
 
+// RateLimiter limits concurrent upstream requests to prevent Qwen rate limiting.
+type RateLimiter struct {
+	ch     chan struct{}
+	mu     sync.Mutex
+	active int
+}
+
+// NewRateLimiter creates a rate limiter with max concurrent requests.
+func NewRateLimiter(maxConcurrent int) *RateLimiter {
+	return &RateLimiter{
+		ch: make(chan struct{}, maxConcurrent),
+	}
+}
+
+// Acquire waits for a slot to become available. Returns a release function.
+func (rl *RateLimiter) Acquire() func() {
+	rl.ch <- struct{}{}
+	rl.mu.Lock()
+	rl.active++
+	rl.mu.Unlock()
+	return func() {
+		<-rl.ch
+		rl.mu.Lock()
+		rl.active--
+		rl.mu.Unlock()
+	}
+}
+
+// Active returns the number of currently active requests.
+func (rl *RateLimiter) Active() int {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	return rl.active
+}
+
 type handlers struct {
 	deps          Deps
 	imageUploader *ossupload.Uploader
 	imageCache    *imageUploadCache
 	sessionStore  *session.Store
+	claudeCodeOpt *ClaudeCodeOptimizer
+	rateLimiter   *RateLimiter
 }
 
 func (h *handlers) health(w http.ResponseWriter, _ *http.Request) {

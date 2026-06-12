@@ -1,4 +1,4 @@
-﻿package qwen
+package qwen
 
 import (
 	"bytes"
@@ -406,6 +406,15 @@ func (e *UpstreamError) Error() string {
 		body = body[:256] + "..."
 	}
 	return fmt.Sprintf("upstream %d: %s", e.Status, body)
+}
+
+// IsRateLimit returns true if the error indicates Qwen's rate limiting
+// or anti-bot protection (FAIL_SYS_USER_VALIDATE).
+func (e *UpstreamError) IsRateLimit() bool {
+	return strings.Contains(e.Body, "FAIL_SYS_USER_VALIDATE") ||
+		strings.Contains(e.Body, "被挤爆") ||
+		strings.Contains(e.Body, "punish") ||
+		e.Status == http.StatusTooManyRequests
 }
 
 func isAntiBotResponse(resp *http.Response, body string) bool {

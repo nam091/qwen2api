@@ -74,6 +74,8 @@ func New(deps Deps) http.Handler {
 		imageUploader: ossupload.NewUploader(deps.Config.BaseURL, deps.Config.UserAgent, deps.Logger),
 		imageCache:    newImageUploadCache(),
 		sessionStore:  deps.SessionStore,
+		claudeCodeOpt: NewClaudeCodeOptimizer(deps.Config.Features.ClaudeCodeOptimization),
+		rateLimiter:   NewRateLimiter(3), // Max 3 concurrent upstream requests
 	}
 	if deps.Metrics != nil {
 		r.Use(h.metricsMiddleware)
@@ -118,6 +120,14 @@ func New(deps Deps) http.Handler {
 		// Claude Code count_tokens endpoint
 		r.Post("/v1/messages/count_tokens", h.claudeCountTokens)
 		r.Post("/messages/count_tokens", h.claudeCountTokens)
+
+		// Conversation memory CRUD
+		r.Post("/v1/conversations", h.createConversation)
+		r.Get("/v1/conversations", h.listConversations)
+		r.Get("/v1/conversations/{id}", h.getConversation)
+		r.Put("/v1/conversations/{id}", h.updateConversation)
+		r.Delete("/v1/conversations/{id}", h.deleteConversation)
+		r.Get("/v1/conversations/{id}/messages", h.getConversationMessages)
 	})
 
 	r.Group(func(r chi.Router) {

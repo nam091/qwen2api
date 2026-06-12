@@ -13,6 +13,16 @@ import (
 // returned unchanged.
 func Repair(s string) (string, bool) {
 	s = strings.TrimSpace(s)
+
+	// Fix malformed keys even when the JSON is technically valid
+	// (e.g. "name:": "value" is valid JSON but semantically wrong for tool calls)
+	fixed := fixMalformedKeys(s)
+	if fixed != s {
+		if json.Valid([]byte(fixed)) {
+			return fixed, true
+		}
+	}
+
 	if json.Valid([]byte(s)) {
 		return s, false
 	}
@@ -23,6 +33,7 @@ func Repair(s string) (string, bool) {
 	s = fixSingleQuotes(s)
 	s = fixTrailingCommas(s)
 	s = fixUnescapedQuotes(s)
+	s = fixMalformedKeys(s)
 
 	if json.Valid([]byte(s)) {
 		return s, s != original
@@ -201,4 +212,15 @@ func extractJSON(s string) string {
 		}
 	}
 	return ""
+}
+
+// reMalformedKey matches JSON keys with trailing colons inside the key string
+// (e.g. "name:": "value" instead of "name": "value"). This is a common LLM
+// typo when generating tool call JSON.
+var reMalformedKey = regexp.MustCompile(`"([a-zA-Z_][a-zA-Z0-9_]*):"\s*:`)
+
+// fixMalformedKeys fixes common LLM typos where a colon is included inside
+// the JSON key string instead of outside it.
+func fixMalformedKeys(s string) string {
+	return reMalformedKey.ReplaceAllString(s, `"$1":`)
 }
