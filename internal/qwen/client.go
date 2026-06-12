@@ -159,7 +159,7 @@ func (c *Client) applyHeaders(req *http.Request, token string) {
 	if c.cookieProvider != nil {
 		dynamicCookies := c.cookieProvider.Get()
 		if c.logger != nil {
-			c.logger.Info("using dynamic cookies",
+			c.logger.Debug("using dynamic cookies",
 				"has_ssxmod_itna", dynamicCookies["ssxmod_itna"] != "",
 				"has_ssxmod_itna2", dynamicCookies["ssxmod_itna2"] != "",
 			)
@@ -185,17 +185,12 @@ func (c *Client) applyHeaders(req *http.Request, token string) {
 	}
 
 	if c.logger != nil {
-		c.logger.Info("final cookies",
+		c.logger.Debug("final cookies",
 			"cookie_count", len(cookies),
-			"cookies", strings.Join(cookies, "; "),
 		)
-		c.logger.Info("request headers",
-			"authorization", req.Header.Get("Authorization"),
+		c.logger.Debug("request headers set",
 			"user_agent", req.Header.Get("User-Agent"),
-			"accept", req.Header.Get("Accept"),
 			"bx-v", req.Header.Get("bx-v"),
-			"source", req.Header.Get("source"),
-			"version", req.Header.Get("Version"),
 		)
 	}
 
@@ -302,24 +297,16 @@ func (c *Client) Completions(ctx context.Context, token string, req CompletionRe
 		return nil, err
 	}
 
-	// Debug logging for request
-	if c.logger != nil {
-		c.logger.Info("sending upstream request",
+	// Debug logging for request — only at Debug level to avoid I/O bottleneck
+	if c.logger != nil && c.logger.Enabled(ctx, slog.LevelDebug) {
+		c.logger.Debug("sending upstream request",
 			"endpoint", "/api/v2/chat/completions",
 			"chat_id", req.ChatID,
 			"model", req.Model,
 			"chat_type", req.ChatType,
 			"message_count", len(req.Messages),
 			"request_body_length", len(raw),
-			"request_body", string(raw),
 		)
-		if len(req.Messages) > 0 {
-			c.logger.Info("first message in request",
-				"role", req.Messages[0].Role,
-				"content_length", len(req.Messages[0].Content),
-				"content", req.Messages[0].Content,
-			)
-		}
 	}
 
 	endpoint, err := url.JoinPath(c.cfg.BaseURL, "/api/v2/chat/completions")
@@ -345,10 +332,9 @@ func (c *Client) Completions(ctx context.Context, token string, req CompletionRe
 	}
 
 	if c.logger != nil {
-		c.logger.Info("upstream response received",
+		c.logger.Debug("upstream response received",
 			"status_code", resp.StatusCode,
 			"content_type", resp.Header.Get("Content-Type"),
-			"headers", fmt.Sprintf("%v", resp.Header),
 		)
 	}
 
@@ -367,9 +353,9 @@ func (c *Client) Completions(ctx context.Context, token string, req CompletionRe
 	// Read first few bytes to check if it's JSON or SSE
 	peek := make([]byte, 100)
 	n, _ := io.ReadFull(resp.Body, peek)
-	if c.logger != nil {
-		c.logger.Info("upstream response peek",
-			"first_bytes", string(peek[:n]),
+	if c.logger != nil && c.logger.Enabled(ctx, slog.LevelDebug) {
+		c.logger.Debug("upstream response peek",
+			"first_bytes_len", n,
 			"is_json", strings.HasPrefix(string(peek[:n]), "{"),
 			"is_sse", strings.HasPrefix(string(peek[:n]), "data:"),
 		)
@@ -380,9 +366,9 @@ func (c *Client) Completions(ctx context.Context, token string, req CompletionRe
 		// Read the rest of the body
 		rest, _ := io.ReadAll(resp.Body)
 		fullBody := string(peek[:n]) + string(rest)
-		if c.logger != nil {
-			c.logger.Info("upstream JSON response",
-				"body", fullBody,
+		if c.logger != nil && c.logger.Enabled(ctx, slog.LevelDebug) {
+			c.logger.Debug("upstream JSON response",
+				"body_length", len(fullBody),
 			)
 		}
 

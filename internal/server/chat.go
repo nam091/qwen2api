@@ -47,23 +47,24 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Debug logging for message content
-	h.deps.Logger.Info("received request",
+	// Debug logging for message content — only at Debug level to avoid I/O bottleneck
+	h.deps.Logger.Debug("received request",
 		"model", req.Model,
 		"message_count", len(req.Messages),
 		"stream", req.Stream,
 	)
-	for i, m := range req.Messages {
-		text := m.Text()
-		h.deps.Logger.Info("message details",
-			"index", i,
-			"role", m.Role,
-			"content_raw", string(m.Content),
-			"content_length", len(m.Content),
-			"text_length", len(text),
-			"text_preview", truncate(text, 100),
-			"is_empty", text == "",
-		)
+	if h.deps.Logger.Enabled(context.Background(), slog.LevelDebug) {
+		for i, m := range req.Messages {
+			text := m.Text()
+			h.deps.Logger.Debug("message details",
+				"index", i,
+				"role", m.Role,
+				"content_length", len(m.Content),
+				"text_length", len(text),
+				"text_preview", truncate(text, 100),
+				"is_empty", text == "",
+			)
+		}
 	}
 
 	apiKey := bearerOrQuery(r)
@@ -113,22 +114,22 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	// and the upstream request builder to avoid redundant O(n*m) string building.
 	collapsedText := collapseMessages(req.Messages)
 
-	// Debug logging for collapsed text
-	h.deps.Logger.Info("collapsed text",
+	// Debug logging for collapsed text — only at Debug level
+	h.deps.Logger.Debug("collapsed text",
 		"length", len(collapsedText),
 		"preview", truncate(collapsedText, 200),
 	)
 
 	upstreamReq := buildQwenRequestFullCollapsed(req, collapsedText, h.deps.Config.Features.Multimodal, h.deps.Config.Features.ThinkingMode)
 
-	// Debug logging for upstream request
-	h.deps.Logger.Info("upstream request built",
+	// Debug logging for upstream request — only at Debug level
+	h.deps.Logger.Debug("upstream request built",
 		"model", upstreamReq.Model,
 		"chat_type", upstreamReq.ChatType,
 		"message_count", len(upstreamReq.Messages),
 	)
-	if len(upstreamReq.Messages) > 0 {
-		h.deps.Logger.Info("first upstream message",
+	if h.deps.Logger.Enabled(context.Background(), slog.LevelDebug) && len(upstreamReq.Messages) > 0 {
+		h.deps.Logger.Debug("first upstream message",
 			"role", upstreamReq.Messages[0].Role,
 			"content_length", len(upstreamReq.Messages[0].Content),
 			"content_parts_count", len(upstreamReq.Messages[0].ContentParts),
@@ -933,16 +934,16 @@ func (h *handlers) collectChatCompletion(body io.ReadCloser, id string, created 
 		}
 		eventCount++
 
-		// Debug logging for upstream events
-		if eventCount <= 5 || h.deps.Logger.Enabled(context.Background(), slog.LevelDebug) {
-			h.deps.Logger.Info("upstream event",
+		// Debug logging for upstream events — only at Debug level to avoid hot-loop overhead
+		if h.deps.Logger.Enabled(context.Background(), slog.LevelDebug) {
+			h.deps.Logger.Debug("upstream event",
 				"event_number", eventCount,
 				"has_delta", evt.Delta != nil,
 				"choices_count", len(evt.Delta.Choices),
 			)
 			if evt.Delta != nil && len(evt.Delta.Choices) > 0 {
 				choice := evt.Delta.Choices[0]
-				h.deps.Logger.Info("upstream choice",
+				h.deps.Logger.Debug("upstream choice",
 					"phase", choice.Delta.Phase,
 					"content_length", len(choice.Delta.Content),
 					"content_preview", truncate(choice.Delta.Content, 100),
@@ -1339,32 +1340,40 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 			if triggered {
 				return nil
 			}
-			accumulated := fullContent.String()
-			if strings.Contains(accumulated, "<tool_call") {
-				triggered = true
-				return nil
-			}
-			// Stream content that is safe (far enough from a potential tag start)
-			safe := len(accumulated) - len("<tool_call")
-			// Ensure we don't cut in the middle of a multi-byte UTF-8 character
-			for safe > emittedLen && !utf8.RuneStart(accumulated[safe]) {
-				safe--
-			}
-			if safe > emittedLen {
-				chunk := accumulated[emittedLen:safe]
-				role := ""
-				if !roleSent {
-					role = "assistant"
-					roleSent = true
+			// Optimized: only check for tool call when we have enough new content
+			// This reduces String() calls from O(n) to O(n/markerLen) where n is total content length
+			const markerLen = len("<tool_call")
+			currentLen := fullContent.Len()
+			if currentLen >= markerLen {
+				// Only check if we've accumulated at least markerLen new bytes since last emission
+				if currentLen-emittedLen >= markerLen {
+					accumulated := fullContent.String()
+					if strings.Contains(accumulated, "<tool_call") {
+						triggered = true
+						return nil
+					}
+					// Stream safe content (everything except the last markerLen bytes)
+					safe := len(accumulated) - markerLen
+					for safe > emittedLen && !utf8.RuneStart(accumulated[safe]) {
+						safe--
+					}
+					if safe > emittedLen {
+						chunk := accumulated[emittedLen:safe]
+						role := ""
+						if !roleSent {
+							role = "assistant"
+							roleSent = true
+						}
+						emit(openai.StreamChunk{
+							ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+							Choices: []openai.StreamChoice{{
+								Index: 0,
+								Delta: openai.Delta{Role: role, Content: chunk},
+							}},
+						})
+						emittedLen = safe
+					}
 				}
-				emit(openai.StreamChunk{
-					ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
-					Choices: []openai.StreamChoice{{
-						Index: 0,
-						Delta: openai.Delta{Role: role, Content: chunk},
-					}},
-				})
-				emittedLen = safe
 			}
 			return nil
 		},

@@ -340,7 +340,10 @@ const dashboardHTML = `<!DOCTYPE html>
 <script>
 async function refresh() {
   try {
-    const r = await fetch("/dashboard/data");
+    const params = new URLSearchParams(window.location.search);
+    const apiKey = params.get("api_key") || params.get("token") || "";
+    const url = "/dashboard/data" + (apiKey ? "?api_key=" + encodeURIComponent(apiKey) : "");
+    const r = await fetch(url);
     if (!r.ok) throw new Error("HTTP " + r.status);
     const d = await r.json();
     render(d);
