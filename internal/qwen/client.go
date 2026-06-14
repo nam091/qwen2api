@@ -85,13 +85,18 @@ func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
 		}
 		base.IdleConnTimeout = idle
 		base.ForceAttemptHTTP2 = true
+		base.TLSHandshakeTimeout = 30 * time.Second // Increase from default 10s
 		transport = base
 	}
 
-	httpClient := &http.Client{Timeout: timeout}
-	if transport != nil {
-		httpClient.Transport = transport
+	// Create default transport with increased TLS timeout if pooling is disabled
+	if transport == nil {
+		defaultTransport := http.DefaultTransport.(*http.Transport).Clone()
+		defaultTransport.TLSHandshakeTimeout = 30 * time.Second
+		transport = defaultTransport
 	}
+
+	httpClient := &http.Client{Timeout: timeout, Transport: transport}
 
 	// Stream client gets its OWN transport to avoid HTTP/2 multiplexing
 	// failures killing all concurrent streams on the same connection.
@@ -102,6 +107,7 @@ func NewClient(cfg ClientConfig, logger *slog.Logger) *Client {
 	streamTransport.MaxIdleConnsPerHost = 32
 	streamTransport.IdleConnTimeout = 5 * time.Minute // Longer than upstream keepalive
 	streamTransport.DisableCompression = false
+	streamTransport.TLSHandshakeTimeout = 30 * time.Second // Increase from default 10s
 	streamClient := &http.Client{
 		Transport: streamTransport,
 		// No timeout — streams can run indefinitely. Context cancellation

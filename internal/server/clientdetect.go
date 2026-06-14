@@ -33,11 +33,19 @@ func DetectClient(r *http.Request) ClientType {
 		return ClientCodex
 	}
 
-	// Claude Code
+	// Claude Code — check multiple patterns
 	if strings.Contains(ua, "claude-code") || strings.Contains(xApp, "claude-code") {
 		return ClientClaudeCode
 	}
 	if strings.Contains(ua, "anthropic") && strings.Contains(ua, "claude") {
+		return ClientClaudeCode
+	}
+	// Claude Code may send just "claude" in x-app
+	if strings.Contains(xApp, "claude") {
+		return ClientClaudeCode
+	}
+	// Check for anthropic-specific headers (Claude Code sends these)
+	if r.Header.Get("anthropic-version") != "" {
 		return ClientClaudeCode
 	}
 
@@ -70,6 +78,11 @@ func DetectClient(r *http.Request) ClientType {
 	}
 	if strings.Contains(xTitle, "opencode") {
 		return ClientOpenCode
+	}
+
+	// Check path-based detection: Claude Code always hits /v1/messages
+	if strings.HasPrefix(r.URL.Path, "/v1/messages") {
+		return ClientClaudeCode
 	}
 
 	return ClientUnknown

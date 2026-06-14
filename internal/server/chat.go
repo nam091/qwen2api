@@ -223,7 +223,7 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	// the previous turn that hashed that turn's FULL message slice.
 	var lookupContinuityKey string
 	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil {
-		lookupContinuityKey = lookupConvKeyCached(upstreamReq.Model+":conv", req.Messages, collapsedText)
+		lookupContinuityKey = lookupConvKey(upstreamReq.Model+":conv", req.Messages)
 	}
 	var storeContinuityKey string
 	if h.deps.Config.Features.ConversationContinuity && h.deps.Cache != nil && len(req.Messages) > 0 {
@@ -313,9 +313,19 @@ func (h *handlers) chatCompletions(w http.ResponseWriter, r *http.Request) {
 
 		body, err = h.deps.Qwen.Completions(r.Context(), token.Value, upstreamReq)
 		if err != nil {
-			if cacheHit && cacheKey != "" {
-				h.deps.Cache.Invalidate(cacheKey)
+			if cacheHit {
+				if cacheKey != "" {
+					h.deps.Cache.Invalidate(cacheKey)
+				}
+				if lookupContinuityKey != "" {
+					h.deps.Cache.Invalidate(lookupContinuityKey)
+				}
+				if storeContinuityKey != "" {
+					h.deps.Cache.Invalidate(storeContinuityKey)
+				}
 				cacheHit = false
+				chatID = ""
+				body = nil
 			}
 			if shouldRetry(err) && attempt < maxAttempts {
 				retries++
@@ -788,30 +798,6 @@ func lookupConvKey(model string, msgs []openai.ChatMessage) string {
 	if len(prefix) == 0 {
 		return ""
 	}
-	return promptcache.Key(model, collapseMessages(prefix))
-}
-
-// lookupConvKeyCached is like lookupConvKey but uses a pre-computed collapsed
-// string for the full message slice. When the trailing [assistant, user] pattern
-// matches, it rebuilds only the prefix portion. For the common case where the
-// full collapsed text IS the prefix (single user message), this avoids a second
-// collapseMessages call entirely.
-func lookupConvKeyCached(model string, msgs []openai.ChatMessage, fullCollapsed string) string {
-	if len(msgs) < 2 {
-		return ""
-	}
-	last := strings.ToLower(msgs[len(msgs)-1].Role)
-	prev := strings.ToLower(msgs[len(msgs)-2].Role)
-	if last != "user" || prev != "assistant" {
-		return ""
-	}
-	prefix := msgs[:len(msgs)-2]
-	if len(prefix) == 0 {
-		return ""
-	}
-	// fullCollapsed was computed from the FULL message slice (including
-	// the trailing assistant+user). The prefix is msgs[:-2], so we must
-	// always recompute — fullCollapsed is NOT the prefix hash.
 	return promptcache.Key(model, collapseMessages(prefix))
 }
 
@@ -1520,6 +1506,15 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 					Delta: openai.Delta{Role: role, Content: cleanText},
 				}},
 			})
+		} else if !roleSent {
+			// No content and no role — emit minimal role to keep stream valid
+			emit(openai.StreamChunk{
+				ID: id, Object: "chat.completion.chunk", Created: created, Model: model,
+				Choices: []openai.StreamChoice{{
+					Index: 0,
+					Delta: openai.Delta{Role: "assistant"},
+				}},
+			})
 		}
 	}
 
@@ -1535,6 +1530,7 @@ func (h *handlers) proxyStreamWithToolDetection(ctx context.Context, w http.Resp
 		if toolCallStart > emittedLen {
 			unsent := accumulated[emittedLen:toolCallStart]
 			unsent = strings.TrimRight(unsent, " \t\n\r")
+			unsent = hallucination.StripToolErrorMessages(unsent)
 			if unsent != "" {
 				role := ""
 				if !roleSent {

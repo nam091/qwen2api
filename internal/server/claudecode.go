@@ -78,7 +78,7 @@ func (o *ClaudeCodeOptimizer) formatToolCalls(toolCalls []openai.ToolCall) strin
 
 // ShouldOptimize returns true if the request should be optimized.
 func (o *ClaudeCodeOptimizer) ShouldOptimize(clientType ClientType, conversationID string) bool {
-	return o.enabled && clientType == ClientClaudeCode && conversationID != ""
+	return o.enabled && clientType == ClientClaudeCode
 }
 
 // GetOptimizationStats returns statistics about the optimization.

@@ -156,9 +156,9 @@ func TestClaudeCodeOptimizer_ShouldOptimize(t *testing.T) {
 		t.Error("expected ShouldOptimize to return true for Claude Code with conversation_id")
 	}
 
-	// Should not optimize for Claude Code without conversation_id
-	if optimizer.ShouldOptimize(ClientClaudeCode, "") {
-		t.Error("expected ShouldOptimize to return false for Claude Code without conversation_id")
+	// Should optimize for Claude Code without conversation_id
+	if !optimizer.ShouldOptimize(ClientClaudeCode, "") {
+		t.Error("expected ShouldOptimize to return true for Claude Code without conversation_id")
 	}
 
 	// Should not optimize for other clients

@@ -39,7 +39,7 @@ func build() {
 		Ssxmodi2:               cfg.SsxmodItna2,
 		TimeoutSeconds:         cfg.TimeoutSeconds,
 		BrowserFallbackEnabled: cfg.Features.BrowserEngineFallback,
-	})
+	}, logger)
 	client.SetConfigRef(&cfg)
 	httpServer = server.New(server.Deps{
 		Config:    &cfg,

@@ -15,6 +15,7 @@ import (
 
 	"github.com/keaume34/qwen2api/internal/claude"
 	"github.com/keaume34/qwen2api/internal/config"
+	"github.com/keaume34/qwen2api/internal/hallucination"
 	"github.com/keaume34/qwen2api/internal/openai"
 	"github.com/keaume34/qwen2api/internal/promptcache"
 	"github.com/keaume34/qwen2api/internal/qwen"
@@ -69,23 +70,28 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 	// Resolve model alias
 	oaiReq.Model = h.deps.Config.ResolveModel(oaiReq.Model)
 
-	// Claude Code optimization: extract only new content when client is
-	// Claude Code and the feature is enabled. This reduces upstream token
-	// usage by 50-80% for long conversations.
-	clientType := DetectClient(r)
-	if h.claudeCodeOpt.ShouldOptimize(clientType, "") {
-		optimized := h.claudeCodeOpt.ExtractNewContent(oaiReq.Messages)
-		if optimized != collapseMessages(oaiReq.Messages) {
-			h.deps.Logger.Debug("claude code optimization applied",
-				"client", clientType,
-				"messages_before", len(oaiReq.Messages),
-			)
-			oaiReq.Messages = []openai.ChatMessage{{
-				Role:    "user",
-				Content: jsonStringRaw(optimized),
-			}}
-		}
+	// Filter tools: when there are too many tools (e.g. 248 from MCP servers),
+	// the tool prompt consumes all output tokens and the model can't generate
+	// anything. Filter to keep core tools + a limited set of MCP tools.
+	if len(oaiReq.Tools) > 40 {
+		oaiReq.Tools = filterToolsForPrompt(oaiReq.Tools)
+		h.deps.Logger.Debug("tools filtered for prompt",
+			"original", len(req.Tools),
+			"filtered", len(oaiReq.Tools),
+		)
 	}
+
+	// Claude Code optimization: disabled because it collapses all messages
+	// into a single user message, losing conversation context. Tool filtering
+	// (above) already reduces token usage significantly.
+	clientType := DetectClient(r)
+	h.deps.Logger.Debug("claude request detected",
+		"client", clientType,
+		"ua", r.Header.Get("User-Agent"),
+		"x_app", r.Header.Get("x-app"),
+		"tools", len(req.Tools),
+		"messages", len(req.Messages),
+	)
 
 	// Auto-compact: if messages exceed context window threshold, compact them
 	if h.deps.Config.Session.ContextWindowTokens > 0 {
@@ -213,7 +219,7 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 					h.markBadAndLog(token.Value, chatErr, "create chat session (claude)", attempt)
 					continue
 				}
-				writeClaudeError(w, http.StatusBadGateway, "api_error", "failed to create chat: "+chatErr.Error())
+				h.handleUpstreamFailure(w, token.Value, chatErr, "create chat session (claude)")
 				h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusBadGateway, time.Since(start), false, retries, chatErr)
 				return
 			}
@@ -249,7 +255,7 @@ func (h *handlers) claudeMessages(w http.ResponseWriter, r *http.Request) {
 				h.markBadAndLog(token.Value, cmpErr, "open completion stream (claude)", attempt)
 				continue
 			}
-			writeClaudeError(w, http.StatusBadGateway, "api_error", "upstream request failed: "+cmpErr.Error())
+			h.handleUpstreamFailure(w, token.Value, cmpErr, "open completion stream (claude)")
 			h.logRequestEndpoint(r, oaiReq, "claude", token.Value, http.StatusBadGateway, time.Since(start), false, retries, cmpErr)
 			return
 		}
@@ -384,6 +390,7 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 	var emittedLen int
 	triggered := false // true once we suspect a <tool_call> tag and buffer
 	var inputTokens, outputTokens int
+	finishReasonSeen := false
 
 	startThinkingBlock := func() {
 		if thinkingStarted {
@@ -520,6 +527,8 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 			}
 
 			if choice.FinishReason != nil {
+				finishReasonSeen = true
+				h.deps.Logger.Debug("claude stream: finish_reason received", "reason", *choice.FinishReason, "content_len", fullContent.Len())
 				switch *choice.FinishReason {
 				case "stop":
 					stopReason = "end_turn"
@@ -539,6 +548,30 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 		// detect it instead of silently treating the response as complete.
 		stopReason = "max_tokens"
 	}
+	if !finishReasonSeen && loopErr == nil {
+		// Qwen stream ended cleanly without sending finish_reason.
+		// Log the last chunk for debugging
+		h.deps.Logger.Warn("claude stream: no finish_reason received, treating based on content",
+			"content_len", fullContent.Len(),
+			"has_tool_markers", toolcall.SawToolMarker(fullContent.String()),
+			"has_tools", hasTools,
+		)
+		// Check if the model intended tool calls — if so, treat as max_tokens
+		// so Claude Code can auto-continue. Otherwise, treat as end_turn to
+		// avoid infinite continuation loops.
+		if hasTools && toolcall.SawToolMarker(fullContent.String()) {
+			stopReason = "max_tokens"
+		} else {
+			stopReason = "end_turn"
+		}
+	}
+	h.deps.Logger.Info("claude stream completed",
+		"stop_reason", stopReason,
+		"finish_reason_seen", finishReasonSeen,
+		"loop_err", loopErr,
+		"content_len", fullContent.Len(),
+		"thinking_len", fullThinking.Len(),
+	)
 	if errors.Is(loopErr, context.Canceled) {
 		return
 	}
@@ -564,7 +597,11 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 
 	if hasTools {
 		result := toolcall.ParseWithFormats(accumulated, multiFormat)
-		// Validate tool names against client's tool definitions
+		// Always deobfuscate tool names first (strip u_ prefix)
+		for i := range result.ToolCalls {
+			result.ToolCalls[i].Function.Name = toolname.FromQwen(result.ToolCalls[i].Function.Name)
+		}
+		// Then validate against client's tool definitions if available
 		if len(result.ToolCalls) > 0 && len(claudeTools) > 0 {
 			validNames := make(map[string]bool, len(claudeTools))
 			for _, t := range claudeTools {
@@ -572,16 +609,7 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 			}
 			filtered := make([]openai.ToolCall, 0, len(result.ToolCalls))
 			for _, tc := range result.ToolCalls {
-				name := tc.Function.Name
-				// Try exact match
-				if validNames[name] {
-					filtered = append(filtered, tc)
-					continue
-				}
-				// Try deobfuscated name
-				deobfuscated := toolname.FromQwen(name)
-				if deobfuscated != name && validNames[deobfuscated] {
-					tc.Function.Name = deobfuscated
+				if validNames[tc.Function.Name] {
 					filtered = append(filtered, tc)
 				}
 			}
@@ -598,6 +626,7 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 		if len(result.ToolCalls) > 0 {
 			stopReason = "tool_use"
 			cleanText := strings.TrimSpace(result.Content)
+			cleanText = hallucination.StripToolErrorMessages(cleanText)
 			// Emit any leading text content as a single block.
 			if cleanText != "" {
 				startTextBlock()
@@ -629,11 +658,8 @@ func (h *handlers) streamClaudeResponse(ctx context.Context, w http.ResponseWrit
 			}
 
 			// Emit each tool_use as its own block.
-			toolStartIdx := textBlockIdx + 1
-			if cleanText == "" && !thinkingStarted {
-				toolStartIdx = textBlockIdx
-			}
-			if cleanText != "" {
+			toolStartIdx := textBlockIdx
+			if cleanText != "" || thinkingStarted {
 				toolStartIdx = textBlockIdx + 1
 			}
 			for i, tc := range result.ToolCalls {
@@ -771,7 +797,11 @@ func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCl
 
 	if hasTools {
 		result := toolcall.ParseWithFormats(full, multiFormat)
-		// Validate tool names against client's tool definitions
+		// Always deobfuscate tool names first (strip u_ prefix)
+		for i := range result.ToolCalls {
+			result.ToolCalls[i].Function.Name = toolname.FromQwen(result.ToolCalls[i].Function.Name)
+		}
+		// Then validate against client's tool definitions if available
 		if len(result.ToolCalls) > 0 && len(claudeTools) > 0 {
 			validNames := make(map[string]bool, len(claudeTools))
 			for _, t := range claudeTools {
@@ -779,25 +809,27 @@ func (h *handlers) aggregateClaudeResponse(w http.ResponseWriter, body io.ReadCl
 			}
 			filtered := make([]openai.ToolCall, 0, len(result.ToolCalls))
 			for _, tc := range result.ToolCalls {
-				name := tc.Function.Name
-				// Try exact match
-				if validNames[name] {
-					filtered = append(filtered, tc)
-					continue
-				}
-				// Try deobfuscated name
-				deobfuscated := toolname.FromQwen(name)
-				if deobfuscated != name && validNames[deobfuscated] {
-					tc.Function.Name = deobfuscated
+				if validNames[tc.Function.Name] {
 					filtered = append(filtered, tc)
 				}
 			}
 			result.ToolCalls = filtered
 		}
+		// Try to fix malformed tool calls (non-streaming path)
+		if len(result.ToolCalls) > 0 {
+			oaiTools := make([]openai.Tool, len(claudeTools))
+			for i, t := range claudeTools {
+				oaiTools[i] = openai.Tool{Type: "function", Function: openai.ToolFunction{Name: t.Name}}
+			}
+			// Use a nil continuer since we can't do continuation in non-streaming mode
+			result.ToolCalls = toolcall.FixMalformedToolCalls(context.Background(), result.ToolCalls, full, oaiTools, nil)
+		}
 		if len(result.ToolCalls) > 0 {
 			stopReason = "tool_use"
-			if strings.TrimSpace(result.Content) != "" {
-				blocks = append(blocks, claude.ContentPart{Type: "text", Text: result.Content})
+			cleanContent := strings.TrimSpace(result.Content)
+			cleanContent = hallucination.StripToolErrorMessages(cleanContent)
+			if cleanContent != "" {
+				blocks = append(blocks, claude.ContentPart{Type: "text", Text: cleanContent})
 			}
 			for _, tc := range result.ToolCalls {
 				args := tc.Function.Arguments
@@ -978,5 +1010,61 @@ func isCJKApprox(r rune) bool {
 		(r >= 0xAC00 && r <= 0xD7AF) || // Hangul Syllables
 		(r >= 0x1100 && r <= 0x11FF) || // Hangul Jamo
 		(r >= 0x3130 && r <= 0x318F) // Hangul Compatibility Jamo
+}
+
+// maxPromptTools is the maximum number of tools to include in the upstream
+// prompt. Beyond this, tool definitions consume too many tokens and the model
+// can't generate meaningful output.
+const maxPromptTools = 30
+
+// coreClaudeCodeTools are the essential Claude Code tools that should always
+// be included in the prompt. MCP tools (mcp__*) are filtered separately.
+var coreClaudeCodeTools = map[string]bool{
+	"Read":         true,
+	"Write":        true,
+	"Edit":         true,
+	"Bash":         true,
+	"PowerShell":   true,
+	"Grep":         true,
+	"Glob":         true,
+	"Agent":        true,
+	"WebFetch":     true,
+	"WebSearch":    true,
+	"TaskCreate":   true,
+	"TaskUpdate":   true,
+	"TaskGet":      true,
+	"TaskList":     true,
+	"NotebookEdit": true,
+}
+
+// filterToolsForPrompt reduces the tool list to fit within the model's output
+// token budget. Strategy:
+//  1. Keep all core Claude Code tools (always needed)
+//  2. Fill remaining slots with MCP tools (most useful first)
+//  3. Cap at maxPromptTools total
+//
+// The full tool list is still used for tool name validation when parsing
+// the model's response — only the PROMPT is filtered.
+func filterToolsForPrompt(tools []openai.Tool) []openai.Tool {
+	var core []openai.Tool
+	var mcp []openai.Tool
+
+	for _, t := range tools {
+		if coreClaudeCodeTools[t.Function.Name] {
+			core = append(core, t)
+		} else {
+			mcp = append(mcp, t)
+		}
+	}
+
+	result := core
+	remaining := maxPromptTools - len(core)
+	if remaining > 0 && len(mcp) > 0 {
+		if remaining > len(mcp) {
+			remaining = len(mcp)
+		}
+		result = append(result, mcp[:remaining]...)
+	}
+	return result
 }
 

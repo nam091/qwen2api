@@ -183,5 +183,78 @@ func StripToolErrorMessages(text string) string {
 			result = append(result, line)
 		}
 	}
-	return strings.Join(result, "\n")
+	cleaned := strings.Join(result, "\n")
+	// Handle concatenated error messages without newlines (e.g. "Tool X does not exists.Tool Y does not exists.")
+	// Split by "Tool" prefix and filter out error fragments
+	cleaned = stripConcatenatedToolErrors(cleaned)
+	return cleaned
+}
+
+// stripConcatenatedToolErrors handles cases where Qwen outputs multiple
+// "Tool X does not exists" messages concatenated without newlines.
+func stripConcatenatedToolErrors(text string) string {
+	// Pattern: "Tool <name> does not exists." repeated without spaces/newlines
+	// Split by sentence boundaries and filter
+	lower := strings.ToLower(text)
+	
+	// Find all "Tool ... does not" segments
+	segments := splitToolErrors(text, lower)
+	if len(segments) == 0 {
+		return text
+	}
+	
+	// Reassemble non-error segments
+	var clean []string
+	for _, seg := range segments {
+		if !seg.isError {
+			clean = append(clean, seg.text)
+		}
+	}
+	result := strings.TrimSpace(strings.Join(clean, " "))
+	return result
+}
+
+type textSegment struct {
+	text    string
+	isError bool
+}
+
+func splitToolErrors(text, lower string) []textSegment {
+	var segments []textSegment
+	i := 0
+	for i < len(text) {
+		// Look for "Tool" followed by error indicators
+		if i+4 <= len(text) && lower[i:i+4] == "tool" {
+			// Find the end of this error message (next "Tool" or end of string)
+			end := i + 4
+			for end < len(text) {
+				if end+4 <= len(text) && lower[end:end+4] == "tool" {
+					break
+				}
+				end++
+			}
+			fragment := text[i:end]
+			fragLower := lower[i:end]
+			if strings.Contains(fragLower, "does not") || 
+			   strings.Contains(fragLower, "not available") || 
+			   strings.Contains(fragLower, "not found") {
+				segments = append(segments, textSegment{text: fragment, isError: true})
+			} else {
+				segments = append(segments, textSegment{text: fragment, isError: false})
+			}
+			i = end
+			continue
+		}
+		// Non-"Tool" text
+		end := i + 1
+		for end < len(text) {
+			if end+4 <= len(text) && lower[end:end+4] == "tool" {
+				break
+			}
+			end++
+		}
+		segments = append(segments, textSegment{text: text[i:end], isError: false})
+		i = end
+	}
+	return segments
 }
